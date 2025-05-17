@@ -50,7 +50,8 @@ class BaseStrategy(ABC):
         float
             Position size (0-1 scale)
         """
-        return abs(prob - 0.5) * 2  # Scale to 0-1 linear weight
+        # Use square-root weighting for smoother sizing
+        return (abs(prob - 0.5) * 2) ** 0.5
 
     @abstractmethod
     def initialize(self, config):

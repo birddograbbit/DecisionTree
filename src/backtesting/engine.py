@@ -1,19 +1,22 @@
+# src/backtesting/engine.py
 """
-Backtesting engine for trading strategies.
+Engine for backtesting trading strategies.
 """
 
 import pandas as pd
 import numpy as np
+from datetime import datetime
+import matplotlib.pyplot as plt
+import os
+
+import config
+
 
 class BacktestEngine:
     """
     Engine for backtesting trading strategies.
-    
-    This class handles the simulation of trading signals against historical
-    price data to evaluate strategy performance.
     """
-
-    def __init__(self, initial_capital=100000.0, commission=0.001, slippage=0.001):
+    def __init__(self, initial_capital=100000.0, commission=0.0005, slippage=0.0001):
         """
         Initialize backtesting engine.
         
@@ -21,10 +24,10 @@ class BacktestEngine:
         -----------
         initial_capital : float, default=100000.0
             Initial capital for backtesting
-        commission : float, default=0.001
-            Commission rate per trade (e.g., 0.001 = 0.1%)
-        slippage : float, default=0.001
-            Slippage rate per trade (e.g., 0.001 = 0.1%)
+        commission : float, default=0.0005
+            Commission rate per trade (0.05%)
+        slippage : float, default=0.0001
+            Slippage rate per trade (0.01%)
         """
         self.initial_capital = initial_capital
         self.capital = initial_capital
@@ -49,8 +52,9 @@ class BacktestEngine:
         -----------
         signals : pd.DataFrame
             DataFrame with columns: date, symbol, signal (1 for buy, -1 for sell, 0 for hold)
-        data : dict
-            Dictionary mapping symbols to price DataFrames
+        data : dict or pd.DataFrame
+            If dict: mapping symbols to price DataFrames
+            If DataFrame: price data for a single symbol
             
         Returns:
         --------
@@ -59,83 +63,100 @@ class BacktestEngine:
         """
         self.reset()
         
+        # If data is a DataFrame, convert it to a dict
+        if isinstance(data, pd.DataFrame):
+            symbol = signals['symbol'].iloc[0] if 'symbol' in signals.columns else 'SPY'
+            data = {symbol: data}
+        
         # Sort signals by date
         signals = signals.sort_values('date')
         
+        # Ensure date is the index
+        if 'date' in signals.columns:
+            signals = signals.set_index('date')
+        
         # Initialize equity curve
-        equity_dates = sorted(signals['date'].unique())
-        self.equity_curve = pd.DataFrame(index=equity_dates, columns=['equity'])
+        equity_dates = signals.index.unique()
+        self.equity_curve = pd.DataFrame(index=equity_dates, columns=['equity', 'cash', 'holdings'])
+        self.equity_curve.loc[equity_dates[0], 'cash'] = self.initial_capital
+        self.equity_curve.loc[equity_dates[0], 'holdings'] = 0
         self.equity_curve.loc[equity_dates[0], 'equity'] = self.initial_capital
         
         # Iterate through signals
-        for _, row in signals.iterrows():
-            date = row['date']
-            symbol = row['symbol']
-            signal = row['signal']
+        for date in equity_dates:
+            # Get signals for this date
+            date_signals = signals.loc[date]
             
-            # Get price data for the symbol
-            if symbol not in data:
-                continue
+            # Convert to list of dicts if single row
+            if not isinstance(date_signals, pd.DataFrame):
+                date_signals = [date_signals.to_dict()]
+            else:
+                date_signals = date_signals.to_dict('records')
             
-            price_data = data[symbol]
-            if date not in price_data.index:
-                continue
+            # Process signals
+            for signal_row in date_signals:
+                symbol = signal_row.get('symbol', list(data.keys())[0])
+                signal = signal_row.get('signal', 0)
                 
-            price = price_data.loc[date, 'close']
-            
-            # Process signal
-            if signal == 1 and symbol not in self.positions:  # Buy
-                # Calculate position size
-                position_size = row.get('position_size', 1.0)
-                available_capital = self.capital * 0.95  # Keep some cash
-                position_value = available_capital * position_size
-                shares = position_value / price
-                cost = shares * price * (1 + self.slippage) * (1 + self.commission)
+                # Get price data for the symbol
+                if symbol not in data:
+                    continue
                 
-                if cost <= self.capital:
-                    self.positions[symbol] = {
-                        'shares': shares,
-                        'entry_price': price,
-                        'entry_date': date,
-                        'position_size': position_size
-                    }
-                    self.capital -= cost
+                price_data = data[symbol]
+                if date not in price_data.index:
+                    continue
                     
-            elif signal == -1 and symbol in self.positions:  # Sell
-                position = self.positions[symbol]
-                shares = position['shares']
-                entry_price = position['entry_price']
-                entry_date = position['entry_date']
+                price = price_data.loc[date, 'close']
                 
-                # Calculate proceeds
-                proceeds = shares * price * (1 - self.slippage) * (1 - self.commission)
-                self.capital += proceeds
-                
-                # Record trade
-                pnl = proceeds - (shares * entry_price)
-                ret = (price / entry_price) - 1
-                
-                self.trades.append({
-                    'symbol': symbol,
-                    'entry_date': entry_date,
-                    'entry_price': entry_price,
-                    'exit_date': date,
-                    'exit_price': price,
-                    'shares': shares,
-                    'pnl': pnl,
-                    'return': ret,
-                    'position_size': position['position_size']
-                })
-                
-                # Remove position
-                del self.positions[symbol]
+                # Process signal
+                if signal == 1 and symbol not in self.positions:  # Buy
+                    # Calculate position size (equal weight for simplicity)
+                    available_capital = self.capital * 0.95  # Keep some cash
+                    position_size = available_capital / price
+                    cost = position_size * price * (1 + self.slippage) * (1 + self.commission)
+                    
+                    if cost <= self.capital:
+                        self.positions[symbol] = {
+                            'size': position_size,
+                            'entry_price': price,
+                            'entry_date': date
+                        }
+                        self.capital -= cost
+                        
+                elif signal == -1 and symbol in self.positions:  # Sell
+                    position = self.positions[symbol]
+                    position_size = position['size']
+                    entry_price = position['entry_price']
+                    entry_date = position['entry_date']
+                    
+                    # Calculate proceeds
+                    proceeds = position_size * price * (1 - self.slippage) * (1 - self.commission)
+                    self.capital += proceeds
+                    
+                    # Record trade
+                    self.trades.append({
+                        'symbol': symbol,
+                        'entry_date': entry_date,
+                        'entry_price': entry_price,
+                        'exit_date': date,
+                        'exit_price': price,
+                        'size': position_size,
+                        'pnl': proceeds - (position_size * entry_price),
+                        'return': (price / entry_price) - 1,
+                        'holding_days': (date - entry_date).days
+                    })
+                    
+                    # Remove position
+                    del self.positions[symbol]
             
             # Update equity curve
             total_position_value = sum(
-                data[s].loc[date, 'close'] * pos['shares'] 
+                data[s].loc[date, 'close'] * pos['size'] 
                 for s, pos in self.positions.items() 
                 if date in data[s].index
             )
+            self.equity_curve.loc[date, 'cash'] = self.capital
+            self.equity_curve.loc[date, 'holdings'] = total_position_value
             self.equity_curve.loc[date, 'equity'] = self.capital + total_position_value
         
         # Close any remaining positions at the last date
@@ -144,39 +165,39 @@ class BacktestEngine:
             if symbol not in data or last_date not in data[symbol].index:
                 continue
                 
-            shares = position['shares']
+            position_size = position['size']
             entry_price = position['entry_price']
             entry_date = position['entry_date']
             exit_price = data[symbol].loc[last_date, 'close']
             
             # Calculate proceeds
-            proceeds = shares * exit_price * (1 - self.slippage) * (1 - self.commission)
+            proceeds = position_size * exit_price * (1 - self.slippage) * (1 - self.commission)
             self.capital += proceeds
             
             # Record trade
-            pnl = proceeds - (shares * entry_price)
-            ret = (exit_price / entry_price) - 1
-            
             self.trades.append({
                 'symbol': symbol,
                 'entry_date': entry_date,
                 'entry_price': entry_price,
                 'exit_date': last_date,
                 'exit_price': exit_price,
-                'shares': shares,
-                'pnl': pnl,
-                'return': ret,
-                'position_size': position['position_size']
+                'size': position_size,
+                'pnl': proceeds - (position_size * entry_price),
+                'return': (exit_price / entry_price) - 1,
+                'holding_days': (last_date - entry_date).days
             })
             
             # Remove position
             del self.positions[symbol]
         
         # Update final equity
+        self.equity_curve.loc[last_date, 'cash'] = self.capital
+        self.equity_curve.loc[last_date, 'holdings'] = 0
         self.equity_curve.loc[last_date, 'equity'] = self.capital
         
         # Calculate performance metrics
-        performance = self.calculate_performance()
+        from src.backtesting.performance import calculate_performance_metrics
+        performance = calculate_performance_metrics(self.equity_curve, self.trades)
         
         # Prepare results
         results = {
@@ -187,75 +208,223 @@ class BacktestEngine:
         
         return results
     
-    def calculate_performance(self):
+    def plot_equity_curve(self, save_path=None):
         """
-        Calculate performance metrics.
+        Plot equity curve.
         
+        Parameters:
+        -----------
+        save_path : str, optional
+            Path to save plot
+            
+        Returns:
+        --------
+        matplotlib.figure.Figure
+            Figure object
+        """
+        import matplotlib.dates as mdates
+        from matplotlib.ticker import AutoLocator
+        
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        # Convert dates to numeric format matplotlib can handle
+        date_nums = mdates.date2num(self.equity_curve.index.to_pydatetime())
+        
+        # Plot equity components
+        ax.plot(date_nums, self.equity_curve['equity'], label='Total Equity')
+        ax.plot(date_nums, self.equity_curve['cash'], label='Cash', alpha=0.7)
+        ax.plot(date_nums, self.equity_curve['holdings'], label='Holdings', alpha=0.7)
+        
+        # Format x-axis with dates
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        ax.xaxis.set_major_locator(AutoLocator())
+        plt.xticks(rotation=45)
+        
+        ax.set_title('Equity Curve')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Value ($)')
+        ax.legend()
+        ax.grid(True)
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path)
+        
+        return fig
+
+
+class WalkforwardBacktester:
+    """
+    Walkforward backtesting implementation.
+    """
+    def __init__(self, data, model_factory, feature_engineer, train_size=252*10, test_size=252, step_size=63, 
+                 initial_capital=100000.0, commission=0.0005, slippage=0.0001):
+        """
+        Initialize walkforward backtester.
+        
+        Parameters:
+        -----------
+        data : pd.DataFrame
+            Price data
+        model_factory : callable
+            Function that creates and trains a model given X_train and y_train
+        feature_engineer : callable
+            Function that creates features given price data
+        train_size : int, default=252*10
+            Size of training window in days
+        test_size : int, default=252
+            Size of testing window in days
+        step_size : int, default=63
+            Step size in days for moving the window forward
+        initial_capital : float, default=100000.0
+            Initial capital for backtesting
+        commission : float, default=0.0005
+            Commission rate per trade
+        slippage : float, default=0.0001
+            Slippage rate per trade
+        """
+        self.data = data
+        self.model_factory = model_factory
+        self.feature_engineer = feature_engineer
+        self.train_size = train_size
+        self.test_size = test_size
+        self.step_size = step_size
+        self.initial_capital = initial_capital
+        self.commission = commission
+        self.slippage = slippage
+        
+    def run(self, symbol='SPY', min_train_samples=252, signal_threshold=0.65):
+        """
+        Run walkforward backtest.
+        
+        Parameters:
+        -----------
+        symbol : str, default='SPY'
+            Trading symbol
+        min_train_samples : int, default=252
+            Minimum number of samples required for training
+        signal_threshold : float, default=0.65
+            Threshold for generating trading signals
+            
         Returns:
         --------
         dict
-            Performance metrics
+            Walkforward backtest results
         """
-        equity = self.equity_curve['equity']
+        from src.backtesting.signal_generation import generate_signals
         
-        # Calculate returns
-        returns = equity.pct_change().dropna()
+        # Calculate total number of days
+        total_days = len(self.data)
         
-        # Calculate metrics
-        total_return = (equity.iloc[-1] / equity.iloc[0]) - 1
+        # Calculate number of windows
+        num_windows = (total_days - self.train_size - self.test_size) // self.step_size + 1
         
-        # Annualized metrics (assuming 252 trading days per year)
-        trading_days = len(returns)
-        years = trading_days / 252
+        # Initialize results
+        all_trades = []
+        all_predictions = []
+        all_equity_curves = []
+        window_results = []
         
-        if years > 0:
-            ann_return = (1 + total_return) ** (1 / years) - 1
+        print(f"Running walkforward backtest with {num_windows} windows...")
+        
+        # Loop through windows
+        for i in range(num_windows):
+            # Calculate window indices
+            train_start = i * self.step_size
+            train_end = train_start + self.train_size
+            test_start = train_end
+            test_end = min(test_start + self.test_size, total_days)
+            
+            # Check if we have enough data
+            if test_end - test_start < 10:
+                print(f"Window {i+1}/{num_windows}: Insufficient test data, skipping")
+                continue
+            
+            print(f"Window {i+1}/{num_windows}: Training on {train_start}:{train_end}, Testing on {test_start}:{test_end}")
+            
+            # Get data for this window
+            train_data = self.data.iloc[train_start:train_end]
+            test_data = self.data.iloc[test_start:test_end]
+            
+            # Check if we have enough training samples
+            if len(train_data) < min_train_samples:
+                print(f"Window {i+1}/{num_windows}: Insufficient training data, skipping")
+                continue
+            
+            # Create features
+            X_train, y_train, dates_train = self.feature_engineer(train_data)
+            X_test, y_test, dates_test = self.feature_engineer(test_data)
+            
+            if len(X_train) < min_train_samples or len(X_test) < 10:
+                print(f"Window {i+1}/{num_windows}: Insufficient samples after feature engineering, skipping")
+                continue
+            
+            # Train model
+            print(f"  Training model with {len(X_train)} samples...")
+            model = self.model_factory(X_train, y_train)
+            
+            # Generate signals
+            print(f"  Generating signals for {len(X_test)} test samples...")
+            signals = generate_signals(model, X_test, dates_test, symbol, threshold=signal_threshold)
+            
+            # Run backtest
+            print(f"  Running backtest...")
+            backtest = BacktestEngine(
+                initial_capital=self.initial_capital,
+                commission=self.commission,
+                slippage=self.slippage
+            )
+            backtest_results = backtest.run_backtest(signals, {symbol: test_data})
+            
+            # Store results
+            window_result = {
+                'window': i,
+                'train_start': train_data.index[0],
+                'train_end': train_data.index[-1],
+                'test_start': test_data.index[0],
+                'test_end': test_data.index[-1],
+                'performance': backtest_results['performance'],
+                'model': model,
+                'signals': signals
+            }
+            window_results.append(window_result)
+            
+            if not backtest_results['trades'].empty:
+                all_trades.extend(backtest_results['trades'].to_dict('records'))
+            
+            all_predictions.append({
+                'window': i,
+                'predictions': model.predict(X_test),
+                'actual': y_test,
+                'dates': dates_test,
+                'accuracy': window_result['performance'].get('accuracy', 0)
+            })
+            
+            all_equity_curves.append(backtest_results['equity_curve'])
+            
+        # Combine results
+        if all_equity_curves:
+            combined_equity = pd.concat(all_equity_curves)
+            combined_equity = combined_equity[~combined_equity.index.duplicated(keep='first')]
+            combined_equity = combined_equity.sort_index()
         else:
-            ann_return = total_return
+            combined_equity = pd.DataFrame(columns=['equity', 'cash', 'holdings'])
         
-        ann_volatility = returns.std() * np.sqrt(252)
+        # Calculate overall performance
+        from src.backtesting.performance import calculate_performance_metrics
+        overall_performance = calculate_performance_metrics(combined_equity, all_trades)
         
-        # Risk-adjusted metrics
-        sharpe_ratio = ann_return / ann_volatility if ann_volatility != 0 else 0
+        # Create trades DataFrame
+        trades_df = pd.DataFrame(all_trades) if all_trades else pd.DataFrame()
         
-        # Drawdown analysis
-        drawdown = 1 - equity / equity.cummax()
-        max_drawdown = drawdown.max()
-        
-        # CAGR to Max Drawdown ratio
-        cagr_dd_ratio = ann_return / max_drawdown if max_drawdown != 0 else np.inf
-        
-        # Trade statistics
-        trades_df = pd.DataFrame(self.trades) if self.trades else pd.DataFrame()
-        
-        if not trades_df.empty:
-            win_rate = (trades_df['pnl'] > 0).mean()
-            profit_factor = abs(trades_df[trades_df['pnl'] > 0]['pnl'].sum() / 
-                               trades_df[trades_df['pnl'] <= 0]['pnl'].sum()) if trades_df[trades_df['pnl'] <= 0]['pnl'].sum() != 0 else np.inf
-            avg_win = trades_df[trades_df['pnl'] > 0]['pnl'].mean() if len(trades_df[trades_df['pnl'] > 0]) > 0 else 0
-            avg_loss = trades_df[trades_df['pnl'] <= 0]['pnl'].mean() if len(trades_df[trades_df['pnl'] <= 0]) > 0 else 0
-            avg_return = trades_df['return'].mean()
-            avg_trade = trades_df['pnl'].mean()
-        else:
-            win_rate = 0
-            profit_factor = 0
-            avg_win = 0
-            avg_loss = 0
-            avg_return = 0
-            avg_trade = 0
-        
-        return {
-            'total_return': total_return,
-            'ann_return': ann_return,
-            'ann_volatility': ann_volatility,
-            'sharpe_ratio': sharpe_ratio,
-            'max_drawdown': max_drawdown,
-            'cagr_dd_ratio': cagr_dd_ratio,
-            'win_rate': win_rate,
-            'profit_factor': profit_factor,
-            'avg_win': avg_win,
-            'avg_loss': avg_loss,
-            'avg_return': avg_return,
-            'avg_trade': avg_trade,
-            'num_trades': len(trades_df)
+        # Prepare results
+        results = {
+            'window_results': window_results,
+            'trades': trades_df,
+            'equity_curve': combined_equity,
+            'performance': overall_performance,
+            'predictions': all_predictions
         }
+        
+        return results

@@ -40,11 +40,16 @@ class StackingModel(BaseModel):
         if hasattr(self, 'meta_model_sklearn') and self.meta_model_sklearn is not None:
             return self.meta_model_sklearn
         else:
-            # Create a new pipeline with StandardScaler + LogisticRegression with high max_iter
+            # Create a default meta-learner pipeline
             return make_pipeline(
                 StandardScaler(),
-                LogisticRegression(max_iter=5000, solver='lbfgs', n_jobs=-1)
+                LogisticRegression(max_iter=1000, solver='saga', n_jobs=-1)
             )
+
+    @property
+    def meta_learner(self):
+        """Direct access to the scikit-learn meta-model pipeline."""
+        return self.model
     
     def __init__(self, base_models=None, meta_model=None, cv=5, use_features=False, 
                  meta_model_sklearn=None, meta_model_type='logistic_regression', meta_model_params=None):
@@ -87,7 +92,7 @@ class StackingModel(BaseModel):
                 params.update(self.meta_model_params)
                 self.meta_model_sklearn = make_pipeline(
                     StandardScaler(),
-                    LogisticRegression(max_iter=5000, solver='lbfgs', n_jobs=-1, **params)
+                    LogisticRegression(max_iter=1000, solver='saga', n_jobs=-1, **params)
                 )
             elif meta_model_type == 'random_forest':
                 from sklearn.ensemble import RandomForestClassifier

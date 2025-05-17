@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 from .base_model import BaseModel
 
 class RandomForestModel(BaseModel):
@@ -74,10 +76,10 @@ class RandomForestModel(BaseModel):
         }
         current_params.update(kwargs) # Update with any kwargs, including new ones like class_weight
 
-        self.params = current_params # Store all actual params used
+        self.params = current_params  # Store all actual params used
         self.calibrate = calibrate
         self._base = RandomForestClassifier(**self.params)
-        self._clf = None
+        self._clf = None  # Will hold CalibratedClassifierCV or Pipeline
         self.feature_names = None
 
     def train(self, X, y):
@@ -99,18 +101,18 @@ class RandomForestModel(BaseModel):
         # Store feature names if available (for feature importance)
         self.feature_names = X.columns if hasattr(X, 'columns') else None
         
-        # Train the model
+        # Build a pipeline with scaling
+        pipeline = make_pipeline(StandardScaler(), self._base)
+
         if self.calibrate:
-            # First train the base estimator
-            self._base.fit(X, y)
-            # Wrap it in isotonic calibration
+            # Calibrate probabilities using isotonic regression
             self._clf = CalibratedClassifierCV(
-                self._base, method="isotonic", cv=5
+                pipeline, method="isotonic", cv=5
             )
             self._clf.fit(X, y)
         else:
-            self._base.fit(X, y)
-            self._clf = self._base
+            self._clf = pipeline
+            self._clf.fit(X, y)
         return self
 
     def predict(self, X):

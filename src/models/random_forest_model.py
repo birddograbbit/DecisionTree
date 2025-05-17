@@ -27,68 +27,83 @@ class RandomForestModel(BaseModel):
         Returns:
         --------
         sklearn.ensemble.RandomForestClassifier
-            The base RandomForestClassifier
+            The base random forest classifier
         """
         return self._base
 
     def __init__(self, calibrate=False, n_estimators=100, max_depth=5, min_samples_split=2, 
                  min_samples_leaf=1, max_features='sqrt', criterion='gini', 
-                 random_state=42):
+                 random_state=42, n_jobs=-1, **kwargs):
         """
         Initialize the Random Forest model.
         
         Parameters:
         -----------
         calibrate : bool, default=False
-            Whether to apply probability calibration to the model
+            Whether to use probability calibration
         n_estimators : int, default=100
             Number of trees in the forest
-        max_depth : int, default=5
+        max_depth : int or None, default=5
             Maximum depth of the trees
         min_samples_split : int, default=2
-            Minimum samples required to split a node
+            Minimum samples required to split an internal node
         min_samples_leaf : int, default=1
             Minimum samples required at a leaf node
-        max_features : str or int, default='sqrt'
-            Number of features to consider when looking for the best split
+        max_features : int, float, str, or None, default='sqrt'
+            Number of features to consider for best split
         criterion : str, default='gini'
             Function to measure the quality of a split
         random_state : int, default=42
-            Random state for reproducibility
+            Random seed for reproducibility
+        n_jobs : int, default=-1
+            Number of jobs to run in parallel (-1 means using all processors)
+        **kwargs : dict
+            Additional keyword arguments to pass to RandomForestClassifier
         """
-        super().__init__()
-        self.params = {
+        # Combine default/explicit parameters with any overriding kwargs
+        # kwargs take precedence
+        current_params = {
             'n_estimators': n_estimators,
             'max_depth': max_depth,
             'min_samples_split': min_samples_split,
             'min_samples_leaf': min_samples_leaf,
             'max_features': max_features,
             'criterion': criterion,
-            'random_state': random_state
+            'random_state': random_state,
+            'n_jobs': n_jobs
         }
+        current_params.update(kwargs) # Update with any kwargs, including new ones like class_weight
+
+        self.params = current_params # Store all actual params used
         self.calibrate = calibrate
         self._base = RandomForestClassifier(**self.params)
         self._clf = None
-        
+        self.feature_names = None
+
     def train(self, X, y):
         """
-        Train the Random Forest model.
+        Train the model on given data.
         
         Parameters:
         -----------
-        X : array-like
-            Training features
-        y : array-like
+        X : pd.DataFrame or np.ndarray
+            Feature matrix
+        y : pd.Series or np.ndarray
             Target values
             
         Returns:
         --------
         self
+            For method chaining
         """
+        # Store feature names if available (for feature importance)
+        self.feature_names = X.columns if hasattr(X, 'columns') else None
+        
+        # Train the model
         if self.calibrate:
-            # first train the base estimator
+            # First train the base estimator
             self._base.fit(X, y)
-            # wrap it in isotonic or sigmoid calibration
+            # Wrap it in isotonic calibration
             self._clf = CalibratedClassifierCV(
                 self._base, method="isotonic", cv=5
             )
@@ -97,78 +112,82 @@ class RandomForestModel(BaseModel):
             self._base.fit(X, y)
             self._clf = self._base
         return self
-    
+
     def predict(self, X):
         """
-        Generate binary predictions.
+        Generate predictions for given features.
         
         Parameters:
         -----------
-        X : array-like
-            Features
+        X : pd.DataFrame or np.ndarray
+            Feature matrix
             
         Returns:
         --------
-        array-like
-            Predicted class probabilities for the positive class
+        np.ndarray
+            Predicted probabilities for positive class (class 1)
         """
-        return self.predict_proba(X)
-    
-    def predict_proba(self, X):
+        return self._clf.predict_proba(X)[:, 1]  # Probability of positive class
+
+    def get_feature_importance(self):
         """
-        Generate probability predictions.
-        
-        Parameters:
-        -----------
-        X : array-like
-            Features
-            
-        Returns:
-        --------
-        array-like
-            Predicted probabilities for the positive class
-        """
-        # always route through the calibrated object
-        return self._clf.predict_proba(X)[:, 1]
-    
-    def get_feature_importances(self):
-        """
-        Get feature importances.
+        Return feature importance scores.
         
         Returns:
         --------
-        array-like
-            Feature importances
+        dict or np.ndarray
+            Feature importance scores
         """
-        return self._base.feature_importances_
-    
-    def save(self, filepath):
+        if self.feature_names is None:
+            return self._base.feature_importances_
+        else:
+            # Return dictionary mapping feature names to importance scores
+            return dict(zip(self.feature_names, self._base.feature_importances_))
+
+    def save(self, path):
         """
-        Save the model to a file.
+        Save model to disk.
         
         Parameters:
         -----------
-        filepath : str
-            Path to save the model
+        path : str
+            Path to save model
         """
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, 'wb') as f:
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        
+        # Save the entire model instance
+        with open(path, 'wb') as f:
             pickle.dump(self, f)
-    
+        
+        print(f"Model saved to {path}")
+
     @classmethod
-    def load(cls, filepath):
+    def load(cls, path):
         """
-        Load a model from a file.
+        Load model from disk.
         
         Parameters:
         -----------
-        filepath : str
-            Path to the saved model
+        path : str
+            Path to saved model
             
         Returns:
         --------
         RandomForestModel
-            Loaded model
+            Loaded model instance
         """
-        with open(filepath, 'rb') as f:
-            return pickle.load(f)
+        with open(path, 'rb') as f:
+            model = pickle.load(f)
+        
+        # Ensure the loaded object is a RandomForestModel
+        if not isinstance(model, cls):
+            raise TypeError(f"Loaded model is not a {cls.__name__}")
+        
+        return model
+        
+    def __str__(self):
+        """String representation of the model."""
+        calib_str = ", calibrated" if self.calibrate else ""
+        return f"RandomForestModel(n_estimators={self.params['n_estimators']}, " \
+               f"max_depth={self.params['max_depth']}{calib_str})"

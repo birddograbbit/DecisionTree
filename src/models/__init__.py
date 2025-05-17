@@ -1,17 +1,22 @@
+# src/models/__init__.py
 """
-Models package for decision tree-based trading strategies.
+Models package for the trading system.
 
-This package contains various machine learning models that can be used
-for predicting market movements and generating trading signals.
+This package contains model classes that implement the BaseModel interface,
+allowing for consistent use of different machine learning models.
 """
 
 from .base_model import BaseModel
 from .decision_tree_model import DecisionTreeModel
 from .random_forest_model import RandomForestModel
-from .stacking_model import StackingModel
 
 try:
     from .xgboost_model import XGBoostModel
-    __all__ = ['BaseModel', 'DecisionTreeModel', 'RandomForestModel', 'XGBoostModel', 'StackingModel']
+    __all__ = ['BaseModel', 'DecisionTreeModel', 'RandomForestModel', 'XGBoostModel']
 except ImportError:
-    __all__ = ['BaseModel', 'DecisionTreeModel', 'RandomForestModel', 'StackingModel']
+    # XGBoost not available
+    __all__ = ['BaseModel', 'DecisionTreeModel', 'RandomForestModel']
+
+# Import model factory last to ensure all models are registered
+from .model_factory import ModelFactory
+__all__.append('ModelFactory')

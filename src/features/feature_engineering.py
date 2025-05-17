@@ -1,210 +1,205 @@
+# src/features/feature_engineering.py
 """
-Feature engineering for trading strategies.
+Module for feature engineering.
 """
 
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
-import talib
+from src.features.indicators import *
 
-def calculate_technical_indicators(data):
+def add_technical_indicators(df, lookback_period=10):
     """
-    Calculate technical indicators for the given price data.
+    Add technical indicators to price data.
     
     Parameters:
     -----------
-    data : pd.DataFrame
-        Price data with columns: open, high, low, close, volume
+    df : pd.DataFrame
+        Price data with OHLCV columns
+    lookback_period : int
+        Lookback period for indicators (default: 10)
         
     Returns:
     --------
     pd.DataFrame
-        DataFrame with technical indicators
+        Price data with added technical indicators
     """
     # Make a copy to avoid modifying the original
-    df = data.copy()
-    
-    # Make sure we have the required columns
-    required_cols = ['open', 'high', 'low', 'close', 'volume']
-    if not all(col in df.columns for col in required_cols):
-        raise ValueError(f"Input DataFrame must have columns: {required_cols}")
+    result = df.copy()
     
     # Price-based indicators
+    result['returns'] = result['close'].pct_change(1)
+    result['log_returns'] = np.log(result['close'] / result['close'].shift(1))
+    
     # Moving averages
-    df['sma_5'] = talib.SMA(df['close'], timeperiod=5)
-    df['sma_10'] = talib.SMA(df['close'], timeperiod=10)
-    df['sma_20'] = talib.SMA(df['close'], timeperiod=20)
-    df['sma_50'] = talib.SMA(df['close'], timeperiod=50)
-    df['ema_5'] = talib.EMA(df['close'], timeperiod=5)
-    df['ema_10'] = talib.EMA(df['close'], timeperiod=10)
-    df['ema_20'] = talib.EMA(df['close'], timeperiod=20)
+    result['sma'] = result['close'].rolling(window=lookback_period).mean()
+    result['ema'] = result['close'].ewm(span=lookback_period).mean()
     
-    # Price ratios
-    df['close_to_sma_5'] = df['close'] / df['sma_5']
-    df['close_to_sma_10'] = df['close'] / df['sma_10']
-    df['close_to_sma_20'] = df['close'] / df['sma_20']
-    df['close_to_sma_50'] = df['close'] / df['sma_50']
+    # Volatility
+    result['std'] = result['returns'].rolling(window=lookback_period).std()
     
-    # Returns
-    df['return_1d'] = df['close'].pct_change(1)
-    df['return_5d'] = df['close'].pct_change(5)
-    df['return_10d'] = df['close'].pct_change(10)
-    df['return_20d'] = df['close'].pct_change(20)
-    
-    # Volatility indicators
-    df['atr_5'] = talib.ATR(df['high'], df['low'], df['close'], timeperiod=5)
-    df['atr_10'] = talib.ATR(df['high'], df['low'], df['close'], timeperiod=10)
-    df['atr_20'] = talib.ATR(df['high'], df['low'], df['close'], timeperiod=20)
-    
-    # Normalize ATR by price to get percentage volatility
-    df['atr_5_pct'] = df['atr_5'] / df['close']
-    df['atr_10_pct'] = df['atr_10'] / df['close']
-    df['atr_20_pct'] = df['atr_20'] / df['close']
-    
-    # Standard deviation of returns
-    df['std_5'] = df['return_1d'].rolling(window=5).std()
-    df['std_10'] = df['return_1d'].rolling(window=10).std()
-    df['std_20'] = df['return_1d'].rolling(window=20).std()
-    
-    # Momentum indicators
-    df['rsi_5'] = talib.RSI(df['close'], timeperiod=5)
-    df['rsi_10'] = talib.RSI(df['close'], timeperiod=10)
-    df['rsi_14'] = talib.RSI(df['close'], timeperiod=14)
-    
-    df['macd'], df['macd_signal'], df['macd_hist'] = talib.MACD(
-        df['close'], fastperiod=12, slowperiod=26, signalperiod=9
-    )
+    # Momentum
+    result['rsi'] = calculate_rsi(result, window=lookback_period)
+    result['macd'], result['macd_signal'] = calculate_macd(result)
     
     # Volume indicators
-    df['volume_sma_5'] = talib.SMA(df['volume'], timeperiod=5)
-    df['volume_sma_10'] = talib.SMA(df['volume'], timeperiod=10)
-    df['volume_ratio_5'] = df['volume'] / df['volume_sma_5']
-    df['volume_ratio_10'] = df['volume'] / df['volume_sma_10']
+    result['vwap'] = calculate_vwap(result)
+    result['obv'] = calculate_obv(result)
     
-    df['obv'] = talib.OBV(df['close'], df['volume'])
-    df['obv_sma_5'] = talib.SMA(df['obv'], timeperiod=5)
-    df['obv_ratio'] = df['obv'] / df['obv_sma_5']
+    # Price patterns
+    result['upper_band'], result['middle_band'], result['lower_band'] = calculate_bollinger_bands(result)
     
-    # Bollinger Bands
-    df['bb_upper'], df['bb_middle'], df['bb_lower'] = talib.BBANDS(
-        df['close'], timeperiod=20, nbdevup=2, nbdevdn=2, matype=0
-    )
+    # Additional indicators
+    result['atr'] = calculate_atr(result)
+    result['stoch_k'], result['stoch_d'] = calculate_stochastic(result)
     
-    df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle']
-    df['bb_position'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower'])
+    # Calculate SMA ratio (close / SMA)
+    result['sma_ratio'] = result['close'] / result['sma']
     
-    # Commodity Channel Index
-    df['cci_5'] = talib.CCI(df['high'], df['low'], df['close'], timeperiod=5)
-    df['cci_14'] = talib.CCI(df['high'], df['low'], df['close'], timeperiod=14)
+    # Calculate price position within Bollinger Bands
+    bb_range = result['upper_band'] - result['lower_band']
+    result['bb_position'] = (result['close'] - result['lower_band']) / bb_range
     
-    # Average Directional Index
-    df['adx_14'] = talib.ADX(df['high'], df['low'], df['close'], timeperiod=14)
-    
-    # Drop NaN values
-    df = df.dropna()
-    
-    return df
+    # Price momentum (close vs. previous periods)
+    result['price_momentum_2d'] = result['close'] / result['close'].shift(2) - 1
+    result['price_momentum_5d'] = result['close'] / result['close'].shift(5) - 1
+    result['price_momentum_10d'] = result['close'] / result['close'].shift(10) - 1
 
-def create_target(data, horizon=1, threshold=0.0):
+    
+    # Volume momentum (volume vs. previous periods)
+    result['volume_momentum_1d'] = result['volume'] / result['volume'].shift(1) - 1
+    result['volume_momentum_5d'] = result['volume'] / result['volume'].shift(5) - 1
+    
+    # Drop NaN values introduced by indicators
+    result = result.dropna()
+    
+    return result
+
+def engineer_features(df, lookback_period=10):
     """
-    Create target variable for classification.
+    Create feature matrix for model training.
     
     Parameters:
     -----------
-    data : pd.DataFrame
-        Price data with close column
-    horizon : int, default=1
-        Prediction horizon in days
-    threshold : float, default=0.0
-        Return threshold for positive class
-        
-    Returns:
-    --------
-    pd.Series
-        Target variable (1 for up, 0 for down/flat)
-    """
-    # Calculate future return
-    future_return = data['close'].pct_change(horizon).shift(-horizon)
-    
-    # Create binary target
-    target = (future_return > threshold).astype(int)
-    
-    return target
-
-def engineer_features(data, lookback_period=10):
-    """
-    Generate features and target for model training.
-    
-    Parameters:
-    -----------
-    data : pd.DataFrame
-        Price data with columns: open, high, low, close, volume
-    lookback_period : int, default=10
-        Number of days to look back for feature creation
+    df : pd.DataFrame
+        Price data with OHLCV columns
+    lookback_period : int
+        Number of days to look back for feature creation (default: 10)
         
     Returns:
     --------
     tuple
-        (X, y, dates)
+        (X: feature matrix, y: target values, dates: corresponding dates)
     """
-    # Calculate technical indicators
-    df_with_indicators = calculate_technical_indicators(data)
+    # Add technical indicators
+    df_indicators = add_technical_indicators(df, lookback_period)
     
-    # Create target variable
-    y = create_target(df_with_indicators)
+    # Make a copy to avoid warnings
+    df_features = df_indicators.copy()
     
-    # Select features (all columns except target)
-    feature_cols = [col for col in df_with_indicators.columns 
-                    if col not in ['open', 'high', 'low', 'close', 'volume', 'target']]
+    # Ensure we're not using any future information
+    # by using only indicators that look backwards, not forwards
     
-    X = df_with_indicators[feature_cols]
+    # Create feature list - REMOVE price_momentum_1d as it's causing the leakage
+    features = [
+        'sma_ratio', 'rsi', 'std', 'bb_position',
+        'price_momentum_5d', 'volume_momentum_1d',
+        'macd', 'stoch_k', 'atr'
+    ]
     
-    # Get dates
-    dates = df_with_indicators.index
+    # Extract features
+    X = df_features[features]
+    
+    # Create target (1 if next day's close > current close, 0 otherwise)
+    # The target should be shifted FORWARD (future data)
+    y = (df_features['close'].shift(-1) > df_features['close']).astype(int)
+    
+    # Align X and y by dropping the last row of X (no target for it)
+    X = X.iloc[:-1]
+    y = y.iloc[:-1]
+    
+    # Extract dates for reference
+    dates = X.index
     
     return X, y, dates
 
-def prepare_train_test_data(data, train_end_date):
+def scale_features(X_train, X_test):
     """
-    Prepare training and testing data.
+    Scale features using StandardScaler.
     
     Parameters:
     -----------
-    data : pd.DataFrame
-        Price data with columns: open, high, low, close, volume
-    train_end_date : str
-        End date for training data (format: 'YYYY-MM-DD')
+    X_train : pd.DataFrame
+        Training feature matrix
+    X_test : pd.DataFrame
+        Testing feature matrix
         
     Returns:
     --------
     tuple
-        (X_train, X_test, y_train, y_test, dates_train, dates_test, scaler)
+        (X_train_scaled, X_test_scaled, scaler)
     """
-    # Generate features and target
-    X, y, dates = engineer_features(data)
-    
-    # Split data by date
-    train_mask = dates <= train_end_date
-    X_train = X[train_mask]
-    y_train = y[train_mask]
-    dates_train = dates[train_mask]
-    
-    X_test = X[~train_mask]
-    y_test = y[~train_mask]
-    dates_test = dates[~train_mask]
-    
-    # Scale features
     scaler = StandardScaler()
+    
+    # Fit scaler on training data
     X_train_scaled = pd.DataFrame(
         scaler.fit_transform(X_train),
         columns=X_train.columns,
         index=X_train.index
     )
     
+    # Transform test data
     X_test_scaled = pd.DataFrame(
         scaler.transform(X_test),
         columns=X_test.columns,
         index=X_test.index
     )
+    
+    return X_train_scaled, X_test_scaled, scaler
+
+def prepare_train_test_data(df, train_end_date=None):
+    """
+    Prepare training and testing data for model development.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        Price data with OHLCV columns
+    train_end_date : str or None
+        End date for training data (e.g., '2022-12-31')
+        If None, all data is used for both training and testing
+        
+    Returns:
+    --------
+    tuple
+        (X_train, X_test, y_train, y_test, dates_train, dates_test, scaler)
+    """
+    # Add technical indicators
+    df_features = add_technical_indicators(df)
+    
+    # Engineer features
+    X, y, dates = engineer_features(df_features)
+    
+    # Split data into training and testing sets
+    if train_end_date is not None:
+        train_mask = (dates <= train_end_date)
+        X_train = X[train_mask]
+        y_train = y[train_mask]
+        dates_train = dates[train_mask]
+        
+        X_test = X[~train_mask]
+        y_test = y[~train_mask]
+        dates_test = dates[~train_mask]
+    else:
+        # Use all data for both training and testing
+        X_train = X
+        y_train = y
+        dates_train = dates
+        X_test = X
+        y_test = y
+        dates_test = dates
+    
+    # Scale features
+    X_train_scaled, X_test_scaled, scaler = scale_features(X_train, X_test)
     
     return X_train_scaled, X_test_scaled, y_train, y_test, dates_train, dates_test, scaler

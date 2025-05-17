@@ -1,105 +1,61 @@
+# src/data/preprocessing.py
 """
-Data preprocessing utilities for loading and cleaning price data.
+Module for preprocessing raw data.
 """
 
 import pandas as pd
 import numpy as np
-import os
 
-def load_ibkr_data(train_file, test_file=None):
+# src/data/preprocessing.py (Add this function)
+
+def load_ibkr_data(train_file, test_file):
     """
-    Load IBKR historical price data from CSV files.
+    Load and combine IBKR historical data files.
     
     Parameters:
     -----------
     train_file : str
-        Path to training data CSV file
-    test_file : str, optional
-        Path to testing data CSV file
+        Path to training data file
+    test_file : str
+        Path to testing data file
         
     Returns:
     --------
     pd.DataFrame
-        Combined price data with columns: open, high, low, close, volume
+        Combined and preprocessed data
     """
-    # Check if training file exists
-    if not os.path.exists(train_file):
-        print(f"Training file not found: {train_file}")
-        return None
-    
-    # Load training data
+    # Load training and testing data
+    print(f"Loading training data from {train_file}...")
     train_data = pd.read_csv(train_file)
     
-    # Rename columns to lowercase
-    train_data.columns = [col.lower().strip() for col in train_data.columns]
+    print(f"Loading testing data from {test_file}...")
+    test_data = pd.read_csv(test_file)
     
-    # Check if required columns exist
-    required_cols = ['date', 'open', 'high', 'low', 'close', 'volume']
-    missing_cols = [col for col in required_cols if col not in train_data.columns]
+    # Combine the data
+    combined_data = pd.concat([train_data, test_data])
     
-    if missing_cols:
-        print(f"Missing required columns in training data: {missing_cols}")
-        # Try to adapt to different column names
-        if 'time' in train_data.columns and 'date' in missing_cols:
-            train_data['date'] = train_data['time']
-        if 'adjclose' in train_data.columns and 'close' in missing_cols:
-            train_data['close'] = train_data['adjclose']
-        if 'vol' in train_data.columns and 'volume' in missing_cols:
-            train_data['volume'] = train_data['vol']
-        
-        # Check again
-        missing_cols = [col for col in required_cols if col not in train_data.columns]
-        if missing_cols:
-            print(f"Still missing required columns: {missing_cols}")
-            return None
-    
-    # Load test data if provided
-    if test_file and os.path.exists(test_file):
-        test_data = pd.read_csv(test_file)
-        
-        # Rename columns to lowercase
-        test_data.columns = [col.lower().strip() for col in test_data.columns]
-        
-        # Check if required columns exist
-        missing_cols = [col for col in required_cols if col not in test_data.columns]
-        
-        if missing_cols:
-            print(f"Missing required columns in testing data: {missing_cols}")
-            # Try to adapt to different column names
-            if 'time' in test_data.columns and 'date' in missing_cols:
-                test_data['date'] = test_data['time']
-            if 'adjclose' in test_data.columns and 'close' in missing_cols:
-                test_data['close'] = test_data['adjclose']
-            if 'vol' in test_data.columns and 'volume' in missing_cols:
-                test_data['volume'] = test_data['vol']
-            
-            # Check again
-            missing_cols = [col for col in required_cols if col not in test_data.columns]
-            if missing_cols:
-                print(f"Still missing required columns: {missing_cols}")
-                return None
-        
-        # Combine data
-        combined_data = pd.concat([train_data, test_data], ignore_index=True)
-    else:
-        combined_data = train_data
-    
-    # Convert data types
+    # Convert date column to datetime and set as index
     combined_data['date'] = pd.to_datetime(combined_data['date'])
-    numeric_cols = ['open', 'high', 'low', 'close', 'volume']
-    combined_data[numeric_cols] = combined_data[numeric_cols].apply(pd.to_numeric, errors='coerce')
-    
-    # Sort by date
-    combined_data = combined_data.sort_values('date')
-    
-    # Set date as index
     combined_data.set_index('date', inplace=True)
+    
+    # Sort by date (no need to reverse since IBKR data is already in chronological order)
+    combined_data = combined_data.sort_index()
+    
+    # Make column names lowercase
+    combined_data.columns = combined_data.columns.str.lower()
+    
+    # Check for missing values
+    missing_count = combined_data.isnull().sum().sum()
+    if missing_count > 0:
+        print(f"Warning: Found {missing_count} missing values in the data.")
+        combined_data = combined_data.dropna()
+        print(f"Dropped rows with missing values. New shape: {combined_data.shape}")
     
     return combined_data
 
 def preprocess_data(df):
     """
-    Preprocess price data for model training.
+    Preprocess raw price data for model training.
     
     Parameters:
     -----------
@@ -112,47 +68,58 @@ def preprocess_data(df):
         Preprocessed data
     """
     # Make a copy to avoid modifying the original
-    processed_df = df.copy()
+    df = df.copy()
     
     # Handle missing values
-    processed_df = processed_df.dropna()
+    df = df.dropna()
     
-    # Ensure all values are positive
-    numeric_cols = ['open', 'high', 'low', 'close', 'volume']
-    for col in numeric_cols:
-        if col in processed_df.columns:
-            processed_df = processed_df[processed_df[col] > 0]
+    # Ensure datetime index
+    if not isinstance(df.index, pd.DatetimeIndex):
+        if 'date' in df.columns:
+            df['date'] = pd.to_datetime(df['date'])
+            df.set_index('date', inplace=True)
+        elif 'time' in df.columns:
+            df['time'] = pd.to_datetime(df['time'])
+            df.set_index('time', inplace=True)
     
-    # Ensure high >= low
-    processed_df = processed_df[processed_df['high'] >= processed_df['low']]
+    # Sort by date
+    df = df.sort_index()
     
-    # Ensure high >= close and high >= open
-    processed_df = processed_df[processed_df['high'] >= processed_df['close']]
-    processed_df = processed_df[processed_df['high'] >= processed_df['open']]
+    # Ensure all required columns exist
+    required_cols = ['open', 'high', 'low', 'close', 'volume']
+    missing_cols = set(required_cols) - set(df.columns.str.lower())
+    if missing_cols:
+        raise ValueError(f"Missing required columns: {missing_cols}")
     
-    # Ensure low <= close and low <= open
-    processed_df = processed_df[processed_df['low'] <= processed_df['close']]
-    processed_df = processed_df[processed_df['low'] <= processed_df['open']]
+    # Standardize column names (lowercase)
+    df.columns = [col.lower() for col in df.columns]
     
-    # Remove outliers
-    for col in ['open', 'high', 'low', 'close']:
-        if col in processed_df.columns:
-            # Calculate rolling median and median absolute deviation
-            median = processed_df[col].rolling(window=20).median()
-            mad = np.abs(processed_df[col] - median).rolling(window=20).median()
-            
-            # Define outliers as > 5 MAD from the median
-            outliers = np.abs(processed_df[col] - median) > 5 * mad
-            
-            # Remove outliers
-            processed_df = processed_df[~outliers]
+    # Add additional preprocessing as needed
     
-    # Check for abrupt price changes (gaps)
-    if len(processed_df) > 1:
-        close_to_open = np.abs(processed_df['open'] / processed_df['close'].shift(1) - 1)
-        large_gaps = close_to_open > 0.1  # 10% price change overnight
+    return df
+
+def load_and_preprocess_data(file_path):
+    """
+    Load and preprocess data from CSV file.
+    
+    Parameters:
+    -----------
+    file_path : str
+        Path to CSV file
         
-        if large_gaps.sum() > 0:
-            print(f"Warning: {large_gaps.sum()} large price gaps detected.")
-    
-    return processed_df
+    Returns:
+    --------
+    pd.DataFrame
+        Preprocessed data
+    """
+    try:
+        # Load data
+        df = pd.read_csv(file_path, index_col=0, parse_dates=True)
+        
+        # Preprocess data
+        df = preprocess_data(df)
+        
+        return df
+    except Exception as e:
+        print(f"Error loading and preprocessing data from {file_path}: {e}")
+        return None

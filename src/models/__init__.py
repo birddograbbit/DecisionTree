@@ -1,7 +1,8 @@
 """
-Decision Tree Trading Strategy - Models module
+Models package for decision tree-based trading strategies.
 
-This module contains various model implementations for trading strategies.
+This package contains various machine learning models that can be used
+for predicting market movements and generating trading signals.
 """
 
 from .base_model import BaseModel
@@ -11,11 +12,6 @@ from .stacking_model import StackingModel
 
 try:
     from .xgboost_model import XGBoostModel
-    XGBOOST_AVAILABLE = True
+    __all__ = ['BaseModel', 'DecisionTreeModel', 'RandomForestModel', 'XGBoostModel', 'StackingModel']
 except ImportError:
-    XGBOOST_AVAILABLE = False
-
-__all__ = ["BaseModel", "DecisionTreeModel", "RandomForestModel", "StackingModel"]
-
-if XGBOOST_AVAILABLE:
-    __all__.append("XGBoostModel")
+    __all__ = ['BaseModel', 'DecisionTreeModel', 'RandomForestModel', 'StackingModel']

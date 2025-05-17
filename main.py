@@ -18,8 +18,8 @@ def main():
     print("-----------------------------\n")
     
     # Define data file paths
-    train_file = 'data/raw/historical_data_STOCK_SPY_1_day2000-2009.csv'
-    test_file = 'data/raw/historical_data_STOCK_SPY_1_day2010-2025.csv'
+    train_file = '/Users/jt/TWS/decision_tree_trading/data/raw/historical_data_STOCK_SPY_1_day2000-2009.csv'
+    test_file = '/Users/jt/TWS/decision_tree_trading/data/raw/historical_data_STOCK_SPY_1_day2010-2025.csv'
     
     # Check if data files exist
     if not os.path.exists(train_file) or not os.path.exists(test_file):

@@ -20,308 +20,188 @@ class StackingModel(BaseModel):
     """
     Stacking ensemble model that combines multiple base models.
     
-    This model implements stacking, a technique where multiple models (base models)
-    are trained on the same data, and their predictions are used as features to train
-    a meta-model, which makes the final prediction.
+    This model implements stacking, a technique that combines multiple base models
+    by training a meta-learner on the predictions of the base models.
     """
     
-    # Add a property to make it compatible with ModelEngine._cross_validate
-    @property
-    def model(self):
-        """
-        Property that returns the meta-model as a scikit-learn estimator.
-        
-        Returns:
-        --------
-        estimator
-            The scikit-learn estimator used for meta-modeling
-        """
-        # Return meta_model_sklearn if available, otherwise a default LogisticRegression
-        if hasattr(self, 'meta_model_sklearn') and self.meta_model_sklearn is not None:
-            return self.meta_model_sklearn
-        else:
-            # Create a new pipeline with StandardScaler + LogisticRegression with high max_iter
-            return make_pipeline(
-                StandardScaler(),
-                LogisticRegression(max_iter=5000, solver='lbfgs', n_jobs=-1)
-            )
-    
-    def __init__(self, base_models=None, meta_model=None, cv=5, use_features=False, 
-                 meta_model_sklearn=None, meta_model_type='logistic_regression', meta_model_params=None):
+    def __init__(self, base_models=None, n_folds=5):
         """
         Initialize the stacking model.
         
         Parameters:
         -----------
-        base_models : list of BaseModel instances, default=None
-            List of trained or untrained base models
-        meta_model : BaseModel instance, default=None
-            Meta-model to use (from BaseModel interface)
-        cv : int, default=5
-            Number of cross-validation folds for creating meta-features
-        use_features : bool, default=False
-            Whether to include original features along with model predictions
-            for meta-model training
-        meta_model_sklearn : scikit-learn model instance, default=None
-            Direct scikit-learn model to use as meta-model (alternative to meta_model)
-        meta_model_type : str, default='logistic_regression'
-            Type of scikit-learn meta-model to use if meta_model and meta_model_sklearn are None
-            Options: 'logistic_regression', 'random_forest', 'svm'
-        meta_model_params : dict, default=None
-            Parameters for scikit-learn meta-model if using meta_model_type
+        base_models : list, default=None
+            List of model objects
+            If None, will use default models
+        n_folds : int, default=5
+            Number of folds for cross-validation when generating meta-features
         """
-        # Store configuration
-        self.base_models = base_models or []
-        self.meta_model = meta_model
-        self.cv = cv
-        self.use_features = use_features
-        self.feature_names = None
-        self.is_trained = False
-        
-        # ---- THE ONLY place we build the meta learner ----
-        if self.meta_model is None:
-            self.meta_model_params = meta_model_params or {}
-            
-            if meta_model_type == 'logistic_regression':
-                params = {'C': 1.0, 'random_state': 42}
-                params.update(self.meta_model_params)
-                self.meta_model_sklearn = make_pipeline(
-                    StandardScaler(),
-                    LogisticRegression(max_iter=5000, solver='lbfgs', n_jobs=-1, **params)
-                )
-            elif meta_model_type == 'random_forest':
-                from sklearn.ensemble import RandomForestClassifier
-                params = {'n_estimators': 100, 'max_depth': 3, 'random_state': 42}
-                params.update(self.meta_model_params)
-                self.meta_model_sklearn = RandomForestClassifier(**params)
-            elif meta_model_type == 'svm':
-                from sklearn.svm import SVC
-                params = {'probability': True, 'random_state': 42}
-                params.update(self.meta_model_params)
-                self.meta_model_sklearn = SVC(**params)
-            else:
-                raise ValueError(f"Unsupported meta_model_type: {meta_model_type}")
-        else:
-            self.meta_model_sklearn = meta_model_sklearn
-                
-        self.meta_model_type = meta_model_type
+        super().__init__()
+        self.base_models = base_models if base_models is not None else []
+        self.n_folds = n_folds
+        self.meta_learner = make_pipeline(
+            StandardScaler(),
+            LogisticRegression(max_iter=1000, solver='lbfgs')
+        )
         
     def train(self, X, y):
         """
         Train the stacking model.
         
+        This involves:
+        1. Training each base model on the entire dataset
+        2. Generating meta-features via cross-validation
+        3. Training the meta-learner on the meta-features
+        
         Parameters:
         -----------
-        X : pd.DataFrame or np.ndarray
-            Feature matrix
-        y : pd.Series or np.ndarray
+        X : array-like
+            Training features
+        y : array-like
             Target values
             
         Returns:
         --------
         self
-            For method chaining
         """
-        # Store feature names if available
-        self.feature_names = X.columns if hasattr(X, 'columns') else None
+        # Convert to numpy arrays
+        X = np.array(X)
+        y = np.array(y)
         
-        # Convert inputs to numpy arrays for easier handling
-        X_array = X.values if hasattr(X, 'values') else X
-        y_array = y.values if hasattr(y, 'values') else y
-        
-        # Initialize array to store meta-features
-        meta_features = np.zeros((X_array.shape[0], len(self.base_models)))
-        
-        # Create cross-validation folds
-        kf = KFold(n_splits=self.cv, shuffle=True, random_state=42)
-        
-        # Generate out-of-fold predictions for each base model
-        for i, model in enumerate(self.base_models):
-            # Initialize array to store oof predictions
-            oof_preds = np.zeros(X_array.shape[0])
-            
-            # Generate oof predictions via cross-validation
-            for train_idx, val_idx in kf.split(X_array):
-                # Get train/validation split
-                X_train, X_val = X_array[train_idx], X_array[val_idx]
-                y_train = y_array[train_idx]
-                
-                # Train model on training fold
-                model.train(X_train, y_train)
-                
-                # Make predictions on validation fold
-                oof_preds[val_idx] = model.predict(X_val)
-            
-            # Store oof predictions as meta-features
-            meta_features[:, i] = oof_preds
-        
-        # Now train base models on the entire dataset
+        # Train each base model on the entire dataset
         for model in self.base_models:
-            model.train(X_array, y_array)
+            model.train(X, y)
         
-        # Prepare meta-features for meta-model
-        if self.use_features:
-            # Include original features
-            meta_X = np.hstack([meta_features, X_array])
-        else:
-            # Use only model predictions
-            meta_X = meta_features
+        # Generate meta-features via cross-validation
+        meta_features = self._generate_meta_features(X, y)
         
-        # Train meta-model
-        if self.meta_model is not None:
-            self.meta_model.train(meta_X, y_array)
-        elif self.meta_model_sklearn is not None:
-            # Use the meta-model created in __init__ - do NOT create a new one here
-            self.meta_model_sklearn.fit(meta_X, y_array)
-        else:
-            raise ValueError("No meta-model available for training - this should never happen")
+        # Train meta-learner on meta-features
+        self.meta_learner.fit(meta_features, y)
         
-        self.is_trained = True
         return self
-        
+    
     def predict(self, X):
         """
-        Generate predictions for given features.
+        Generate predictions from the stacking model.
         
         Parameters:
         -----------
-        X : pd.DataFrame or np.ndarray
-            Feature matrix
+        X : array-like
+            Features
             
         Returns:
         --------
-        np.ndarray
+        array-like
             Predicted probabilities
         """
-        if not self.is_trained:
-            raise ValueError("Model has not been trained yet.")
+        # Convert to numpy array
+        X = np.array(X)
         
-        # Convert input to numpy array
-        X_array = X.values if hasattr(X, 'values') else X
+        # Generate predictions from base models
+        base_preds = self._predict_base_models(X)
         
-        # Generate base model predictions
-        base_preds = np.zeros((X_array.shape[0], len(self.base_models)))
-        for i, model in enumerate(self.base_models):
-            base_preds[:, i] = model.predict(X_array)
-        
-        # Prepare features for meta-model
-        if self.use_features:
-            # Include original features
-            meta_X = np.hstack([base_preds, X_array])
-        else:
-            # Use only model predictions
-            meta_X = base_preds
-        
-        # Generate meta-model predictions
-        if self.meta_model is not None:
-            return self.meta_model.predict(meta_X)
-        elif self.meta_model_sklearn is not None:
-            if hasattr(self.meta_model_sklearn, 'predict_proba'):
-                return self.meta_model_sklearn.predict_proba(meta_X)[:, 1]
-            else:
-                return self.meta_model_sklearn.predict(meta_X)
-        else:
-            raise ValueError("No meta-model available for prediction")
-        
-    def get_feature_importance(self):
+        # Generate final predictions using meta-learner
+        return self.meta_learner.predict_proba(base_preds)[:, 1]
+    
+    def predict_proba(self, X):
         """
-        Return feature importance scores.
+        Generate probability predictions.
         
+        Parameters:
+        -----------
+        X : array-like
+            Features
+            
         Returns:
         --------
-        dict
-            Feature importance scores for each base model and meta-model
+        array-like
+            Predicted probabilities
         """
-        if not self.is_trained:
-            raise ValueError("Model has not been trained yet.")
-        
-        # Get base model importances
-        base_importances = []
-        for i, model in enumerate(self.base_models):
-            model_name = f"base_model_{i}"
-            base_importances.append({
-                'name': model_name,
-                'importance': model.get_feature_importance()
-            })
-        
-        # Get meta-model importances
-        if self.meta_model is not None:
-            meta_importance = self.meta_model.get_feature_importance()
-        elif self.meta_model_sklearn is not None:
-            # Try to get importances from sklearn model
-            if hasattr(self.meta_model_sklearn, 'feature_importances_'):
-                meta_importance = {
-                    f'meta_feature_{i}': imp for i, imp in 
-                    enumerate(self.meta_model_sklearn.feature_importances_)
-                }
-            elif hasattr(self.meta_model_sklearn, 'coef_'):
-                meta_importance = {
-                    f'meta_feature_{i}': abs(imp) for i, imp in 
-                    enumerate(self.meta_model_sklearn.coef_[0])
-                }
-            else:
-                meta_importance = {
-                    f'meta_feature_{i}': 1.0/len(self.base_models) 
-                    for i in range(len(self.base_models))
-                }
-        else:
-            meta_importance = {}
-        
-        # Return combined importances
-        return {
-            'base_models': base_importances,
-            'meta_model': meta_importance
-        }
-        
-    def save(self, path):
+        return self.predict(X)
+    
+    def save(self, filepath):
         """
-        Save model to disk.
+        Save the model to a file.
         
         Parameters:
         -----------
-        path : str
-            Path to save model
+        filepath : str
+            Path to save the model
         """
-        # Create directory if it doesn't exist
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        
-        # Save the entire model instance
-        with open(path, 'wb') as f:
+        with open(filepath, 'wb') as f:
             pickle.dump(self, f)
-        
-        print(f"Stacking model saved to {path}")
-        
+    
     @classmethod
-    def load(cls, path):
+    def load(cls, filepath):
         """
-        Load model from disk.
+        Load a model from a file.
         
         Parameters:
         -----------
-        path : str
-            Path to saved model
+        filepath : str
+            Path to the saved model
             
         Returns:
         --------
         StackingModel
-            Loaded model instance
+            Loaded model
         """
-        with open(path, 'rb') as f:
-            model = pickle.load(f)
-        
-        # Ensure the loaded object is a StackingModel
-        if not isinstance(model, cls):
-            raise TypeError(f"Loaded model is not a {cls.__name__}")
-        
-        return model
+        with open(filepath, 'rb') as f:
+            return pickle.load(f)
     
-    def __str__(self):
-        """String representation of the model."""
-        if self.meta_model is not None:
-            meta_model_str = type(self.meta_model).__name__
-        elif self.meta_model_sklearn is not None:
-            meta_model_str = type(self.meta_model_sklearn).__name__
-        else:
-            meta_model_str = "None"
+    def _generate_meta_features(self, X, y):
+        """
+        Generate meta-features via cross-validation.
+        
+        Parameters:
+        -----------
+        X : array-like
+            Features
+        y : array-like
+            Target values
             
-        return f"StackingModel(base_models={len(self.base_models)}, meta_model={meta_model_str}, cv={self.cv})"
+        Returns:
+        --------
+        array-like
+            Meta-features
+        """
+        # Initialize meta-features array
+        meta_features = np.zeros((X.shape[0], len(self.base_models)))
+        
+        # Use KFold cross-validation to generate meta-features
+        kf = KFold(n_splits=self.n_folds, shuffle=True, random_state=42)
+        
+        # For each fold
+        for train_idx, val_idx in kf.split(X):
+            # Train each base model on the training set
+            for i, model in enumerate(self.base_models):
+                model_copy = model.__class__(**model.__dict__)
+                model_copy.train(X[train_idx], y[train_idx])
+                
+                # Generate predictions on the validation set
+                meta_features[val_idx, i] = model_copy.predict(X[val_idx])
+        
+        return meta_features
+    
+    def _predict_base_models(self, X):
+        """
+        Generate predictions from all base models.
+        
+        Parameters:
+        -----------
+        X : array-like
+            Features
+            
+        Returns:
+        --------
+        array-like
+            Base model predictions
+        """
+        # Initialize predictions array
+        preds = np.zeros((X.shape[0], len(self.base_models)))
+        
+        # Generate predictions from each base model
+        for i, model in enumerate(self.base_models):
+            preds[:, i] = model.predict(X)
+        
+        return preds

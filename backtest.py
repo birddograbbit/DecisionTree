@@ -19,7 +19,7 @@ from src.backtesting.performance import calculate_performance_metrics, plot_perf
 import config
 
 
-def run_backtest(model_path, data_path, output_dir='results', threshold=0.65, commission=0.0005, slippage=0.0001):
+def run_backtest(model_path, data_path, output_dir='results', commission=0.0005, slippage=0.0001):
     """
     Run a backtest using a trained model and historical data.
     
@@ -31,8 +31,6 @@ def run_backtest(model_path, data_path, output_dir='results', threshold=0.65, co
         Path to the historical data file
     output_dir : str, default='results'
         Directory to save results
-    threshold : float, default=0.65
-        Probability threshold for generating signals
     commission : float, default=0.0005
         Commission rate per trade
     slippage : float, default=0.0001
@@ -97,7 +95,7 @@ def run_backtest(model_path, data_path, output_dir='results', threshold=0.65, co
     
     # Generate signals
     print("Generating trading signals...")
-    signals = generate_signals(model, X_test, dates_test, threshold=threshold)
+    signals = generate_signals(model, X_test, dates_test)
     
     # Apply signal rules
     signals = apply_signal_rules(signals, consecutive_buys=False)
@@ -183,9 +181,9 @@ def run_backtest(model_path, data_path, output_dir='results', threshold=0.65, co
     return backtest_results
 
 
-def run_walkforward_backtest(data_path, output_dir='results_walkforward', 
+def run_walkforward_backtest(data_path, output_dir='results_walkforward',
                              train_size=252*5, test_size=126, step_size=63,
-                             threshold=0.65, max_depth=5, min_samples_split=5):
+                             max_depth=5, min_samples_split=5):
     """
     Run a walkforward backtest.
     
@@ -201,8 +199,6 @@ def run_walkforward_backtest(data_path, output_dir='results_walkforward',
         Size of testing window in days
     step_size : int, default=63
         Step size in days for moving the window forward
-    threshold : float, default=0.65
-        Probability threshold for generating signals
     max_depth : int, default=5
         Maximum depth of the decision tree
     min_samples_split : int, default=5
@@ -368,8 +364,6 @@ if __name__ == "__main__":
                         help='Path to the historical data directory or file')
     parser.add_argument('--output', type=str, default='results',
                         help='Directory to save results')
-    parser.add_argument('--threshold', type=float, default=0.65,
-                        help='Probability threshold for generating signals')
     parser.add_argument('--walkforward', action='store_true',
                         help='Run walkforward backtest instead of standard backtest')
     parser.add_argument('--train-size', type=int, default=252*5,
@@ -392,7 +386,6 @@ if __name__ == "__main__":
             train_size=args.train_size,
             test_size=args.test_size,
             step_size=args.step_size,
-            threshold=args.threshold,
             max_depth=args.max_depth,
             min_samples_split=args.min_samples_split
         )
@@ -401,6 +394,5 @@ if __name__ == "__main__":
         results = run_backtest(
             model_path=args.model,
             data_path=args.data,
-            output_dir=args.output,
-            threshold=args.threshold
+            output_dir=args.output
         )

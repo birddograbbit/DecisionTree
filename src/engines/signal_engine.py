@@ -7,27 +7,22 @@ import numpy as np
 from src.strategies.base_strategy import BUY_THRESHOLD, SELL_THRESHOLD
 
 class SignalEngine:
-    """
-    Engine for generating trading signals from model predictions.
-    
-    This class handles the conversion of model predictions into actionable
-    trading signals, with various filtering and position sizing options.
-    """
+    """Engine for converting model probabilities into trading signals."""
 
-    def __init__(self, threshold=None, position_sizing=None):
+    def __init__(self, position_sizing=None):
+        """Initialize the signal engine.
+
+        Parameters
+        ----------
+        position_sizing : str, optional
+            Legacy parameter retained for backward compatibility. Position
+            sizing now relies solely on probability distance from 0.5.
         """
-        Initialize the signal engine.
-        
-        Parameters:
-        -----------
-        threshold : float, default=None
-            Legacy parameter - using global thresholds now
-        position_sizing : str, default=None
-            Legacy parameter - using probability-based sizing now
-        """
-        # Kept for backward compatibility, but not used anymore
-        # Global thresholds BUY_THRESHOLD and SELL_THRESHOLD are used instead
-        self.threshold = threshold
+
+        # Global BUY_THRESHOLD and SELL_THRESHOLD are used instead of a
+        # per-engine threshold. The attribute is kept to avoid breaking old
+        # code that may access it.
+        self.threshold = None
         self.position_sizing = position_sizing
 
     def generate_signals(self, predictions, dates, symbol='SPY'):
@@ -64,9 +59,10 @@ class SignalEngine:
             else:  # Hold
                 signal = 0
 
-            # Calculate position size based on confidence (distance from 0.5)
-            position_size = abs(probability - 0.5) * 2  # Scale to 0-1
-            # Only apply position size to non-zero signals
+            # Calculate position size using square-root weighting
+            position_size = (abs(probability - 0.5) * 2) ** 0.5
+
+            # If signal is hold, size should be zero
             if signal == 0:
                 position_size = 0.0
 

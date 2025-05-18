@@ -9,28 +9,24 @@ from src.strategies.base_strategy import BUY_THRESHOLD, SELL_THRESHOLD
 class SignalEngine:
     """
     Engine for generating trading signals from model predictions.
-    
+
     This class handles the conversion of model predictions into actionable
     trading signals, with various filtering and position sizing options.
     """
 
-    def __init__(self, threshold=None, position_sizing="confidence"):
+    def __init__(self, position_sizing="confidence"):
         """
         Initialize the signal engine.
-        
-        Parameters:
-        -----------
-        threshold : float, default=None
-            Legacy parameter - using global thresholds now
-        position_sizing : {'fixed', 'confidence'}, default="confidence"
-            Method used to determine position sizing. ``'fixed'`` results
-            in full-size positions for any non-zero signal, while
-            ``'confidence'`` scales size based on the distance of the
-            probability from ``0.5`` using square-root weighting.
+
+        Parameters
+        ----------
+        position_sizing : {'fixed', 'confidence'}, optional
+            Method used to determine position sizing. ``'fixed'`` issues a
+            full-size position for any non-zero signal, while ``'confidence'``
+            scales size based on the distance of the probability from ``0.5``
+            using square-root weighting. Defaults to ``"confidence"``.
         """
-        # Kept for backward compatibility, but not used anymore
-        # Global thresholds BUY_THRESHOLD and SELL_THRESHOLD are used instead
-        self.threshold = threshold
+        # Global BUY_THRESHOLD and SELL_THRESHOLD are used for all engines.
         self.position_sizing = position_sizing
 
     def generate_signals(self, predictions, dates, symbol='SPY'):
@@ -60,22 +56,21 @@ class SignalEngine:
 
         for i, probability in enumerate(predictions):
             # Determine signal using global thresholds
-            if probability >= BUY_THRESHOLD:  # Buy signal
+            if probability >= BUY_THRESHOLD:        # Buy signal
                 signal = 1
-            elif probability <= SELL_THRESHOLD:  # Sell signal
+            elif probability <= SELL_THRESHOLD:     # Sell signal
                 signal = -1
-            else:  # Hold
+            else:                                   # Hold
                 signal = 0
 
             # Determine position size
             if self.position_sizing == "fixed":
                 position_size = 1.0 if signal != 0 else 0.0
             else:
-                # Default to confidence-based sizing using square-root weighting
                 position_size = (abs(probability - 0.5) * 2) ** 0.5
                 if signal == 0:
                     position_size = 0.0
-
+                    
             signals.append({
                 'date': dates.iloc[i] if hasattr(dates, 'iloc') else dates[i],
                 'symbol': symbol,

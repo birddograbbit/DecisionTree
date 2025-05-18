@@ -15,6 +15,8 @@ except ImportError:
     print("To install XGBoost: pip install xgboost")
 
 from .base_model import BaseModel
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 class XGBoostModel(BaseModel):
     """
@@ -23,6 +25,11 @@ class XGBoostModel(BaseModel):
     This class wraps XGBoost's XGBClassifier to conform
     to our BaseModel interface.
     """
+
+    @property
+    def model(self):
+        """Return the underlying XGBClassifier."""
+        return self._base
 
     def __init__(self, n_estimators=100, max_depth=5, learning_rate=0.1,
                  subsample=0.8, colsample_bytree=0.8, gamma=0, 
@@ -65,7 +72,8 @@ class XGBoostModel(BaseModel):
             'random_state': random_state,
             'n_jobs': n_jobs
         }
-        self.model = xgb.XGBClassifier(**self.params)
+        self._base = xgb.XGBClassifier(**self.params)
+        self._clf = None  # Will hold the pipeline
         self.feature_names = None
 
     def train(self, X, y):
@@ -87,8 +95,9 @@ class XGBoostModel(BaseModel):
         # Store feature names if available (for feature importance)
         self.feature_names = X.columns if hasattr(X, 'columns') else None
         
-        # Train the model
-        self.model.fit(X, y)
+        # Build pipeline with scaling
+        self._clf = make_pipeline(StandardScaler(), self._base)
+        self._clf.fit(X, y)
         return self
 
     def predict(self, X):
@@ -105,7 +114,7 @@ class XGBoostModel(BaseModel):
         np.ndarray
             Predicted probabilities for positive class (class 1)
         """
-        return self.model.predict_proba(X)[:, 1]  # Probability of positive class
+        return self._clf.predict_proba(X)[:, 1]  # Probability of positive class
 
     def get_feature_importance(self):
         """
@@ -117,10 +126,10 @@ class XGBoostModel(BaseModel):
             Feature importance scores
         """
         if self.feature_names is None:
-            return self.model.feature_importances_
+            return self._base.feature_importances_
         else:
             # Return dictionary mapping feature names to importance scores
-            return dict(zip(self.feature_names, self.model.feature_importances_))
+            return dict(zip(self.feature_names, self._base.feature_importances_))
 
     def save(self, path):
         """

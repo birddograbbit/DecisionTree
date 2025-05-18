@@ -76,7 +76,7 @@ class StackedModel(BaseModel):
             from sklearn.preprocessing import StandardScaler
             self.meta_model = make_pipeline(
                 StandardScaler(),
-                LogisticRegression(max_iter=1000, solver='saga', **self.meta_model_params)
+                LogisticRegression(max_iter=1000, solver='saga', n_jobs=-1, **self.meta_model_params)
             )
         elif meta_model_type == 'random_forest':
             from sklearn.ensemble import RandomForestClassifier

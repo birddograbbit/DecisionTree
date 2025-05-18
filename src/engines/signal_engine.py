@@ -67,7 +67,7 @@ class SignalEngine:
             # Determine position size
             if self.position_sizing == "fixed":
                 position_size = 1.0 if signal != 0 else 0.0
-            else:
+            else:  # "confidence" mode
                 position_size = (abs(probability - 0.5) * 2) ** 0.5
                 if signal == 0:
                     position_size = 0.0
@@ -211,3 +211,4 @@ class SignalEngine:
         
         return result
 
+      

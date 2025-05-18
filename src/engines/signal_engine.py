@@ -15,9 +15,18 @@ class SignalEngine:
     """
 
     def __init__(self, position_sizing="confidence"):
-        """Initialize the signal engine.
         """
-        # Global BUY_THRESHOLD and SELL_THRESHOLD are used for all engines.
+        Initialize the signal engine.
+
+        Parameters
+        ----------
+        position_sizing : {'fixed', 'confidence'}, optional
+            Determines how position sizes are calculated. ``'fixed'`` applies a
+            constant size of 1.0 whenever a non-zero signal is generated.
+            ``'confidence'`` (default) scales size based on the distance of the
+            probability from ``0.5`` using square-root weighting.
+        """
+        # Global BUY_THRESHOLD and SELL_THRESHOLD apply for all engines.
         self.position_sizing = position_sizing
 
         
@@ -59,7 +68,6 @@ class SignalEngine:
             if self.position_sizing == "fixed":
                 position_size = 1.0 if signal != 0 else 0.0
             else:  # confidence-based sizing
-
                 position_size = (abs(probability - 0.5) * 2) ** 0.5
                 if signal == 0:
                     position_size = 0.0

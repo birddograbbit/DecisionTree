@@ -29,6 +29,7 @@ class SignalEngine:
         # Global BUY_THRESHOLD and SELL_THRESHOLD are used for all engines.
         self.position_sizing = position_sizing
 
+        
     def generate_signals(self, predictions, dates, symbol='SPY'):
         """
         Generate trading signals from model predictions.
@@ -70,7 +71,7 @@ class SignalEngine:
                 position_size = (abs(probability - 0.5) * 2) ** 0.5
                 if signal == 0:
                     position_size = 0.0
-                    
+
             signals.append({
                 'date': dates.iloc[i] if hasattr(dates, 'iloc') else dates[i],
                 'symbol': symbol,
@@ -209,3 +210,4 @@ class SignalEngine:
                 result.loc[result.index[i], 'entry_price'] = entry_price
         
         return result
+

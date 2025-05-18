@@ -20,3 +20,4 @@ except ImportError:
 # Import model factory last to ensure all models are registered
 from .model_factory import ModelFactory
 __all__.append('ModelFactory')
+

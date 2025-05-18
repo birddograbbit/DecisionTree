@@ -21,9 +21,7 @@ class SignalEngine:
             Legacy parameter retained for backward compatibility. Position
             sizing now relies solely on probability distance from 0.5.
         """
-        # Global BUY_THRESHOLD and SELL_THRESHOLD are used instead of a
-        # per-engine value. The attribute is kept to avoid breaking old code.
-        self.threshold = None
+        # Signals rely on the module-level BUY_THRESHOLD and SELL_THRESHOLD.
         self.position_sizing = position_sizing
 
 

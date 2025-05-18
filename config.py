@@ -28,3 +28,4 @@ MAX_PORTFOLIO_ALLOCATION = 0.5  # Maximum portfolio allocation
 STOP_LOSS_PCT = 0.05  # Stop loss percentage
 MAX_DRAWDOWN = 0.15  # Maximum drawdown threshold
 MAX_HOLDING_DAYS = 10  # Maximum holding period in days
+

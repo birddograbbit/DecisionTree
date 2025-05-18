@@ -181,3 +181,4 @@ class XGBoostModel(BaseModel):
         return f"XGBoostModel(n_estimators={self.params['n_estimators']}, " \
                f"max_depth={self.params['max_depth']}, " \
                f"learning_rate={self.params['learning_rate']})"
+

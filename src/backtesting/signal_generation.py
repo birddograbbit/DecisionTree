@@ -123,7 +123,9 @@ def calculate_positions(signals_df, initial_capital=100000, price_data=None):
     initial_capital : float, default=100000
         Initial capital
     price_data : pd.DataFrame, optional
-        Price data with columns: date, close
+        Price data indexed by date with a ``close`` column representing the
+        security price in the same currency as ``initial_capital``.  Only the
+        ``close`` column is used.
         
     Returns:
     --------
@@ -144,6 +146,7 @@ def calculate_positions(signals_df, initial_capital=100000, price_data=None):
 
     for i in range(len(positions_df)):
         signal = positions_df.iloc[i]['signal']
+        # Track previous position to determine if a trade occurs
         prev_position = position
 
         # Update position based on signal

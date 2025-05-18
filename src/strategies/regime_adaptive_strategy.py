@@ -34,7 +34,6 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
             Strategy configuration with keys:
             - model_type (str): Type of model to use
             - model_params (dict): Model parameters
-            - threshold (float): Signal threshold
             - position_sizing (str): Position sizing method
             - regime_detection (dict): Regime detection configuration
         """
@@ -42,8 +41,10 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
         super().initialize(config)
         
         # ---- Default probability thresholds ----
-        self.buy_threshold = config.get("buy_threshold", 0.65)
-        self.sell_threshold = config.get("sell_threshold", 0.35)
+        # Use global constants to maintain a single source of truth
+        from .base_strategy import BUY_THRESHOLD, SELL_THRESHOLD
+        self.buy_threshold = BUY_THRESHOLD
+        self.sell_threshold = SELL_THRESHOLD
         
         # For backward compatibility with helper methods that still
         # expect a single attribute

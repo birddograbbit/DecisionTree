@@ -104,3 +104,4 @@ def plot_fill_between_dates(ax, dates, values, min_values=None, color='blue', al
     
     # Format x-axis
     format_date_axis(ax)
+

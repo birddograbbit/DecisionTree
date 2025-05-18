@@ -243,3 +243,4 @@ class StackedModel(BaseModel):
         """String representation of the model."""
         base_models_str = ', '.join(f"{config['type']}" for config in self.base_models)
         return f"StackedModel(base_models=[{base_models_str}], meta_model={self.meta_model_type})"
+

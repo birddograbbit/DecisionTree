@@ -41,6 +41,8 @@ class StackingModel(BaseModel):
             return self.meta_model_sklearn
         else:
             # Create a default meta-learner pipeline
+            # Default meta learner uses the saga solver for speed and supports
+            # parallel computation via n_jobs=-1
             return make_pipeline(
                 StandardScaler(),
                 LogisticRegression(max_iter=1000, solver='saga', n_jobs=-1)
@@ -97,6 +99,7 @@ class StackingModel(BaseModel):
             if meta_model_type == 'logistic_regression':
                 params = {'C': 1.0, 'random_state': 42}
                 params.update(self.meta_model_params)
+                # Meta learner pipeline leveraging saga solver and all cores
                 self.meta_model_sklearn = make_pipeline(
                     StandardScaler(),
                     LogisticRegression(max_iter=1000, solver='saga', n_jobs=-1, **params)

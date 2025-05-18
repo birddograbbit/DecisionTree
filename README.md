@@ -17,4 +17,4 @@ This repository contains an implementation of a decision tree classifier for tra
 - Maximum drawdown < 25%
 
 See the [Decision Tree Classifier Strategy](Decision_Tree_Classifier_Strategy.md) for full documentation. The [v0.2 roadmap](v0.2_roadmap.md) describes planned improvements for the next release.
-codex/update-readme-md-with-new-links-oj0vnd
+

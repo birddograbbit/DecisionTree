@@ -46,17 +46,17 @@ class StackingModel(BaseModel):
                 LogisticRegression(max_iter=1000, solver='saga', n_jobs=-1)
             )
 
-        # ------------------------------------------------------------------
-        # Backwards compatibility: expose the meta learner via `meta_learner`
-        # so old code can access the underlying estimator directly.
-        # This mirrors the `model` property but avoids breaking existing tests.
-        # ------------------------------------------------------------------
-        @property
-        def meta_learner(self):
-            """Return the estimator used as meta learner."""
-            if self.meta_model is not None:
-                return self.meta_model
-            return self.meta_model_sklearn
+    # ------------------------------------------------------------------
+    # Backwards compatibility: expose the meta learner via `meta_learner`
+    # so external code can access the underlying estimator directly. This
+    # mirrors the `model` property but avoids breaking existing tests.
+    # ------------------------------------------------------------------
+    @property
+    def meta_learner(self):
+        """Return the estimator used as meta learner."""
+        if self.meta_model is not None:
+            return self.meta_model
+        return self.meta_model_sklearn
     
     def __init__(self, base_models=None, meta_model=None, cv=5, use_features=False, 
                  meta_model_sklearn=None, meta_model_type='logistic_regression', meta_model_params=None):

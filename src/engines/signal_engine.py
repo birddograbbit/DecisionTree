@@ -17,9 +17,11 @@ class SignalEngine:
 
         Parameters
         ----------
-        position_sizing : str, optional
-            Legacy parameter retained for backward compatibility. Position
-            sizing now relies solely on probability distance from 0.5.
+        position_sizing : {'fixed', 'confidence'}, optional
+            Method for determining position size. ``'fixed'`` uses a full
+            position (1.0) for any non-zero signal. ``'confidence'`` scales
+            size based on the distance of the probability from ``0.5`` using
+            square-root weighting. Defaults to ``'confidence'`` when ``None``.
         """
         # Signals rely on the module-level BUY_THRESHOLD and SELL_THRESHOLD.
         self.position_sizing = position_sizing
@@ -59,10 +61,15 @@ class SignalEngine:
             else:                                # Hold
                 signal = 0
 
-            # Calculate position size using square-root weighting
-            position_size = (abs(probability - 0.5) * 2) ** 0.5
-            if signal == 0:
-                position_size = 0.0
+            # Determine position size
+            if self.position_sizing == 'fixed':
+                # Full size whenever a signal is generated
+                position_size = 1.0 if signal != 0 else 0.0
+            else:
+                # Default or 'confidence' sizing based on prediction confidence
+                position_size = (abs(probability - 0.5) * 2) ** 0.5
+                if signal == 0:
+                    position_size = 0.0
 
             signals.append({
                 'date': dates.iloc[i] if hasattr(dates, 'iloc') else dates[i],

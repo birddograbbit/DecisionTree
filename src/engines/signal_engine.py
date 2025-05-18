@@ -14,20 +14,16 @@ class SignalEngine:
     trading signals, with various filtering and position sizing options.
     """
 
-    def __init__(self, threshold=None, position_sizing=None):
+    def __init__(self, position_sizing=None):
+        """Initialize the signal engine.
+
+        Parameters
+        ----------
+        position_sizing : str, optional
+            Legacy parameter retained for backward compatibility. Position
+            sizing now relies on probability distance from ``0.5``.
         """
-        Initialize the signal engine.
-        
-        Parameters:
-        -----------
-        threshold : float, default=None
-            Legacy parameter - using global thresholds now
-        position_sizing : str, default=None
-            Legacy parameter - using probability-based sizing now
-        """
-        # Kept for backward compatibility, but not used anymore
-        # Global thresholds BUY_THRESHOLD and SELL_THRESHOLD are used instead
-        self.threshold = threshold
+        # Global BUY_THRESHOLD and SELL_THRESHOLD are used for all engines.
         self.position_sizing = position_sizing
 
     def generate_signals(self, predictions, dates, symbol='SPY'):
@@ -56,7 +52,7 @@ class SignalEngine:
         signals = []
 
         for i, probability in enumerate(predictions):
-            # Determine signal based on threshold
+            # Determine signal using global thresholds
             if probability >= BUY_THRESHOLD:  # Buy signal
                 signal = 1
             elif probability <= SELL_THRESHOLD:  # Sell signal

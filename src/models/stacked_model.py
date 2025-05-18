@@ -72,7 +72,12 @@ class StackedModel(BaseModel):
         # Use appropriate meta-model based on type
         if meta_model_type == 'logistic_regression':
             from sklearn.linear_model import LogisticRegression
-            self.meta_model = LogisticRegression(**self.meta_model_params)
+            from sklearn.pipeline import make_pipeline
+            from sklearn.preprocessing import StandardScaler
+            self.meta_model = make_pipeline(
+                StandardScaler(),
+                LogisticRegression(max_iter=1000, solver='saga', **self.meta_model_params)
+            )
         elif meta_model_type == 'random_forest':
             from sklearn.ensemble import RandomForestClassifier
             self.meta_model = RandomForestClassifier(**self.meta_model_params)
@@ -236,3 +241,4 @@ class StackedModel(BaseModel):
         """String representation of the model."""
         base_models_str = ', '.join(f"{config['type']}" for config in self.base_models)
         return f"StackedModel(base_models=[{base_models_str}], meta_model={self.meta_model_type})"
+

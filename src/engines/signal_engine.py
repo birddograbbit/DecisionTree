@@ -9,26 +9,23 @@ from src.strategies.base_strategy import BUY_THRESHOLD, SELL_THRESHOLD
 class SignalEngine:
     """
     Engine for generating trading signals from model predictions.
-    
-    This class handles the conversion of model predictions into actionable
-    trading signals, with various filtering and position sizing options.
     """
 
     def __init__(self, position_sizing=None):
         """
         Initialize the signal engine.
-        
-        Parameters:
-        -----------
+
+        Parameters
+        ----------
         position_sizing : str, optional
             Legacy parameter retained for backward compatibility. Position
-            sizing now relies on probability distance from 0.5.
+            sizing now relies solely on probability distance from 0.5.
         """
         # Global BUY_THRESHOLD and SELL_THRESHOLD are used instead of a
-        # per-engine value. The attribute is kept to avoid breaking old
-        # code that may access it.
+        # per-engine value. The attribute is kept to avoid breaking old code.
         self.threshold = None
         self.position_sizing = position_sizing
+
 
     def generate_signals(self, predictions, dates, symbol='SPY'):
         """
@@ -56,17 +53,16 @@ class SignalEngine:
         signals = []
 
         for i, probability in enumerate(predictions):
-            # Determine signal based on threshold
+            # Determine signal using global thresholds
             if probability >= BUY_THRESHOLD:  # Buy signal
                 signal = 1
             elif probability <= SELL_THRESHOLD:  # Sell signal
                 signal = -1
-            else:  # Hold
+            else:                                # Hold
                 signal = 0
 
-            # Calculate position size using square-root weighting for smoother sizing
+            # Calculate position size using square-root weighting
             position_size = (abs(probability - 0.5) * 2) ** 0.5
-            # Only apply position size to non-zero signals
             if signal == 0:
                 position_size = 0.0
 

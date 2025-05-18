@@ -14,20 +14,18 @@ class SignalEngine:
     trading signals, with various filtering and position sizing options.
     """
 
-    def __init__(self, threshold=None, position_sizing=None):
+    def __init__(self, position_sizing="confidence"):
+        """Initialize the signal engine.
+
+        Parameters
+        ----------
+        position_sizing : {'fixed', 'confidence'}, optional
+            Method used to determine position size. ``"fixed"`` issues a full
+            position (1.0) for any non-zero signal, while ``"confidence"`` scales
+            size based on the distance of the probability from ``0.5`` using
+            square-root weighting. Defaults to ``"confidence"``.
         """
-        Initialize the signal engine.
-        
-        Parameters:
-        -----------
-        threshold : float, default=None
-            Legacy parameter - using global thresholds now
-        position_sizing : str, default=None
-            Legacy parameter - using probability-based sizing now
-        """
-        # Kept for backward compatibility, but not used anymore
-        # Global thresholds BUY_THRESHOLD and SELL_THRESHOLD are used instead
-        self.threshold = threshold
+        # Global BUY_THRESHOLD and SELL_THRESHOLD are used for all engines.
         self.position_sizing = position_sizing
 
     def generate_signals(self, predictions, dates, symbol='SPY'):
@@ -64,11 +62,13 @@ class SignalEngine:
             else:  # Hold
                 signal = 0
 
-            # Calculate position size based on confidence (distance from 0.5)
-            position_size = abs(probability - 0.5) * 2  # Scale to 0-1
-            # Only apply position size to non-zero signals
-            if signal == 0:
-                position_size = 0.0
+            # Determine position size
+            if self.position_sizing == "fixed":
+                position_size = 1.0 if signal != 0 else 0.0
+            else:  # confidence-based sizing
+                position_size = (abs(probability - 0.5) * 2) ** 0.5
+                if signal == 0:
+                    position_size = 0.0
 
             signals.append({
                 'date': dates.iloc[i] if hasattr(dates, 'iloc') else dates[i],

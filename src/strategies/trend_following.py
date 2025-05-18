@@ -28,7 +28,7 @@ class TrendFollowingStrategy(BaseStrategy):
             Strategy configuration with keys:
             - model_type (str): Type of model to use
             - model_params (dict): Model parameters
-            - position_sizing (str): Position sizing method (deprecated - using probability-based sizing now)
+            - position_sizing (str): Legacy parameter for backward compatibility
         """
         # Store configuration
         self.config = config

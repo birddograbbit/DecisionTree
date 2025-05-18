@@ -168,7 +168,6 @@ def calculate_positions(signals_df, initial_capital=100000, price_data=None):
                     capital -= price
                 elif position < prev_position:
                     capital += price
-
         # Store capital
         positions_df.iloc[i, positions_df.columns.get_loc('capital')] = capital
     

@@ -12,18 +12,15 @@ class SignalEngine:
     """
 
     def __init__(self, position_sizing=None):
-        """
-        Initialize the signal engine.
+        """Initialize the signal engine.
 
         Parameters
         ----------
-        position_sizing : {'fixed', 'confidence'}, optional
-            Method for determining position size. ``'fixed'`` uses a full
-            position (1.0) for any non-zero signal. ``'confidence'`` scales
-            size based on the distance of the probability from ``0.5`` using
-            square-root weighting. Defaults to ``'confidence'`` when ``None``.
+        position_sizing : str, optional
+            Legacy parameter retained for backward compatibility. Position
+            sizing now relies on probability distance from ``0.5``.
         """
-        # Signals rely on the module-level BUY_THRESHOLD and SELL_THRESHOLD.
+        # Global BUY_THRESHOLD and SELL_THRESHOLD are used for all engines.
         self.position_sizing = position_sizing
 
     def generate_signals(self, predictions, dates, symbol='SPY'):

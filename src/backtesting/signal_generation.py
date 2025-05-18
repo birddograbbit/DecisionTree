@@ -138,37 +138,35 @@ def calculate_positions(signals_df, initial_capital=100000, price_data=None):
     # Add columns for positions and capital
     positions_df['position'] = 0
     positions_df['capital'] = initial_capital
-    
     # Calculate positions
     position = 0
     capital = initial_capital
-    prev_position = 0
 
     for i in range(len(positions_df)):
         signal = positions_df.iloc[i]['signal']
-        # Track previous position to determine if a trade occurs
-        prev_position = position
+        prev_position = position                       # track prior position
 
         # Update position based on signal
-        if signal == 1:  # Buy
+        if signal == 1:            # Buy
             position = 1
-        elif signal == -1:  # Sell
+        elif signal == -1:         # Sell
             position = 0
 
         # Store position
         positions_df.iloc[i, positions_df.columns.get_loc('position')] = position
 
-        # Update capital if price data is provided
+        # Update capital when trades occur and price data is available
         if price_data is not None:
             date = positions_df.iloc[i]['date']
             if date in price_data.index:
                 price = price_data.loc[date, 'close']
-                # Deduct cost on buy and add proceeds on sell
-                if position > prev_position:
+                if position > prev_position:           # entering long
                     capital -= price
-                elif position < prev_position:
+                elif position < prev_position:         # exiting long
                     capital += price
+
         # Store capital
         positions_df.iloc[i, positions_df.columns.get_loc('capital')] = capital
+
     
     return positions_df

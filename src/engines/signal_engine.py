@@ -7,12 +7,13 @@ import numpy as np
 from src.strategies.base_strategy import BUY_THRESHOLD, SELL_THRESHOLD
 
 class SignalEngine:
-    """Engine for converting model probabilities into trading signals."""
+    """
+    Engine for generating trading signals from model predictions.
+    """
 
     def __init__(self, position_sizing=None):
         """
         Initialize the signal engine.
-
 
         Parameters
         ----------
@@ -20,13 +21,11 @@ class SignalEngine:
             Legacy parameter retained for backward compatibility. Position
             sizing now relies solely on probability distance from 0.5.
         """
-
         # Global BUY_THRESHOLD and SELL_THRESHOLD are used instead of a
-        # per-engine threshold. The attribute is kept to avoid breaking old
-        # code that may access it.
-
+        # per-engine value. The attribute is kept to avoid breaking old code.
         self.threshold = None
         self.position_sizing = position_sizing
+
 
     def generate_signals(self, predictions, dates, symbol='SPY'):
         """
@@ -59,13 +58,11 @@ class SignalEngine:
                 signal = 1
             elif probability <= SELL_THRESHOLD:  # Sell signal
                 signal = -1
-            else:  # Hold
+            else:                                # Hold
                 signal = 0
 
             # Calculate position size using square-root weighting
             position_size = (abs(probability - 0.5) * 2) ** 0.5
-
-            # If signal is hold, size should be zero
             if signal == 0:
                 position_size = 0.0
 

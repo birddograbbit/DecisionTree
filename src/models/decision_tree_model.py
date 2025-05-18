@@ -179,3 +179,4 @@ class DecisionTreeModel(BaseModel):
         calib_str = ", calibrated" if self.calibrate else ""
         return f"DecisionTreeModel(max_depth={self.params['max_depth']}, " \
                f"min_samples_split={self.params['min_samples_split']}{calib_str})"
+

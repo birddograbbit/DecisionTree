@@ -681,3 +681,4 @@ class RegimeDetector:
         regime_stats = regime_stats[cols]
         
         return regime_stats
+

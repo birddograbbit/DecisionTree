@@ -26,7 +26,6 @@ class SignalEngine:
         # Signals rely on the module-level BUY_THRESHOLD and SELL_THRESHOLD.
         self.position_sizing = position_sizing
 
-
     def generate_signals(self, predictions, dates, symbol='SPY'):
         """
         Generate trading signals from model predictions.
@@ -54,19 +53,17 @@ class SignalEngine:
 
         for i, probability in enumerate(predictions):
             # Determine signal using global thresholds
-            if probability >= BUY_THRESHOLD:  # Buy signal
+            if probability >= BUY_THRESHOLD:        # Buy signal
                 signal = 1
-            elif probability <= SELL_THRESHOLD:  # Sell signal
+            elif probability <= SELL_THRESHOLD:     # Sell signal
                 signal = -1
-            else:                                # Hold
+            else:                                   # Hold
                 signal = 0
 
             # Determine position size
             if self.position_sizing == 'fixed':
-                # Full size whenever a signal is generated
                 position_size = 1.0 if signal != 0 else 0.0
             else:
-                # Default or 'confidence' sizing based on prediction confidence
                 position_size = (abs(probability - 0.5) * 2) ** 0.5
                 if signal == 0:
                     position_size = 0.0

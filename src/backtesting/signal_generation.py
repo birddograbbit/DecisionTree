@@ -140,26 +140,31 @@ def calculate_positions(signals_df, initial_capital=100000, price_data=None):
     # Calculate positions
     position = 0
     capital = initial_capital
-    
+    prev_position = 0
+
     for i in range(len(positions_df)):
         signal = positions_df.iloc[i]['signal']
-        
+
         # Update position based on signal
-        if signal == 1:  # Buy
+        if signal == 1:
             position = 1
-        elif signal == -1:  # Sell
+        elif signal == -1:
             position = 0
-        
+
         # Store position
         positions_df.iloc[i, positions_df.columns.get_loc('position')] = position
-        
-        # Update capital if price data is provided
+
+        # Update capital when trades occur and price data is available
         if price_data is not None:
             date = positions_df.iloc[i]['date']
             if date in price_data.index:
                 price = price_data.loc[date, 'close']
-                # TODO: Implement capital calculation
-        
+                if position > prev_position:  # Enter long
+                    capital -= price
+                elif position < prev_position:  # Exit long
+                    capital += price
+        prev_position = position
+
         # Store capital
         positions_df.iloc[i, positions_df.columns.get_loc('capital')] = capital
     

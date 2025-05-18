@@ -10,7 +10,9 @@ class SignalEngine:
     """Engine for converting model probabilities into trading signals."""
 
     def __init__(self, position_sizing=None):
-        """Initialize the signal engine.
+        """
+        Initialize the signal engine.
+
 
         Parameters
         ----------
@@ -22,6 +24,7 @@ class SignalEngine:
         # Global BUY_THRESHOLD and SELL_THRESHOLD are used instead of a
         # per-engine threshold. The attribute is kept to avoid breaking old
         # code that may access it.
+
         self.threshold = None
         self.position_sizing = position_sizing
 
@@ -51,7 +54,7 @@ class SignalEngine:
         signals = []
 
         for i, probability in enumerate(predictions):
-            # Determine signal based on threshold
+            # Determine signal using global thresholds
             if probability >= BUY_THRESHOLD:  # Buy signal
                 signal = 1
             elif probability <= SELL_THRESHOLD:  # Sell signal

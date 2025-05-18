@@ -123,7 +123,9 @@ def calculate_positions(signals_df, initial_capital=100000, price_data=None):
     initial_capital : float, default=100000
         Initial capital
     price_data : pd.DataFrame, optional
-        Price data with columns: date, close
+        Price data indexed by date with a ``close`` column representing the
+        security price in the same currency as ``initial_capital``.  Only the
+        ``close`` column is used.
         
     Returns:
     --------
@@ -141,20 +143,21 @@ def calculate_positions(signals_df, initial_capital=100000, price_data=None):
     position = 0
     capital = initial_capital
     prev_position = 0
-    
+
     for i in range(len(positions_df)):
         signal = positions_df.iloc[i]['signal']
+        # Track previous position to determine if a trade occurs
         prev_position = position
-        
+
         # Update position based on signal
         if signal == 1:  # Buy
             position = 1
         elif signal == -1:  # Sell
             position = 0
-        
+
         # Store position
         positions_df.iloc[i, positions_df.columns.get_loc('position')] = position
-        
+
         # Update capital if price data is provided
         if price_data is not None:
             date = positions_df.iloc[i]['date']
@@ -165,7 +168,6 @@ def calculate_positions(signals_df, initial_capital=100000, price_data=None):
                     capital -= price
                 elif position < prev_position:
                     capital += price
-        
         # Store capital
         positions_df.iloc[i, positions_df.columns.get_loc('capital')] = capital
     

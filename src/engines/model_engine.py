@@ -252,8 +252,13 @@ class ModelEngine:
             
             sklearn_model = ModelWrapper(self.model)
         
-        # Perform cross-validation
-        return cross_val_score(sklearn_model, X, y, cv=cv, scoring='accuracy')
+        # Perform cross-validation while ignoring runtime warnings that can
+        # occur with small sample sizes or constant features
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            scores = cross_val_score(sklearn_model, X, y, cv=cv, scoring='accuracy')
+        return scores
     
     def _perform_hpo(self, X, y, param_grid, cv=3, scoring='accuracy'):
         """

@@ -18,12 +18,14 @@ class SignalEngine:
         """
         Initialize the signal engine.
 
-        Parameters:
-        -----------
-        position_sizing : str, default=None
-            Position sizing method
+        Parameters
+        ----------
+        position_sizing : str, optional
+            Legacy parameter retained for backward compatibility. Position
+            sizing now relies on probability distance from 0.5.
         """
-        # Kept for backward compatibility
+        # Global BUY_THRESHOLD and SELL_THRESHOLD are used instead of a per-engine value.
+        self.threshold = None
         self.position_sizing = position_sizing
 
     def generate_signals(self, predictions, dates, symbol='SPY'):

@@ -269,8 +269,8 @@ def run_walkforward_backtest(data_path, output_dir='results_walkforward',
         slippage=config.SLIPPAGE_RATE
     )
     
-    # Run walkforward backtest
-    results = backtester.run(signal_threshold=threshold)
+    # Run walkforward backtest using global thresholds
+    results = backtester.run()
     
     # Print performance summary
     performance = results['performance']

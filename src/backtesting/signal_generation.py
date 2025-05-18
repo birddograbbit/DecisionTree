@@ -5,9 +5,10 @@ Module for generating trading signals from model predictions.
 
 import pandas as pd
 import numpy as np
+from src.strategies.base_strategy import BUY_THRESHOLD, SELL_THRESHOLD
 
 
-def generate_signals(model, X, dates, symbol='SPY', threshold=0.65):
+def generate_signals(model, X, dates, symbol='SPY'):
     """
     Generate trading signals from model predictions.
     
@@ -21,8 +22,6 @@ def generate_signals(model, X, dates, symbol='SPY', threshold=0.65):
         Dates corresponding to the feature matrix rows
     symbol : str, default='SPY'
         Trading symbol
-    threshold : float, default=0.65
-        Probability threshold for generating buy signals
         
     Returns:
     --------
@@ -36,17 +35,17 @@ def generate_signals(model, X, dates, symbol='SPY', threshold=0.65):
     if not isinstance(dates, pd.Series):
         dates = pd.Series(dates)
     
-    # Create signals DataFrame
+    # Create signals DataFrame using global thresholds
     signals = []
     for i in range(len(X)):
-        if proba[i] > threshold:  # Strong buy signal
+        if proba[i] > BUY_THRESHOLD:  # Buy signal
             signals.append({
                 'date': dates.iloc[i],
                 'symbol': symbol,
                 'signal': 1,  # Buy
                 'probability': proba[i]
             })
-        elif proba[i] < 1 - threshold:  # Strong sell signal
+        elif proba[i] < SELL_THRESHOLD:  # Sell signal
             signals.append({
                 'date': dates.iloc[i],
                 'symbol': symbol,

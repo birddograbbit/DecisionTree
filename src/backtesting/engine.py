@@ -294,7 +294,7 @@ class WalkforwardBacktester:
         self.commission = commission
         self.slippage = slippage
         
-    def run(self, symbol='SPY', min_train_samples=252, signal_threshold=0.65):
+    def run(self, symbol='SPY', min_train_samples=252):
         """
         Run walkforward backtest.
         
@@ -304,8 +304,7 @@ class WalkforwardBacktester:
             Trading symbol
         min_train_samples : int, default=252
             Minimum number of samples required for training
-        signal_threshold : float, default=0.65
-            Threshold for generating trading signals
+            (global BUY/SELL thresholds from BaseStrategy are used)
             
         Returns:
         --------
@@ -366,7 +365,7 @@ class WalkforwardBacktester:
             
             # Generate signals
             print(f"  Generating signals for {len(X_test)} test samples...")
-            signals = generate_signals(model, X_test, dates_test, symbol, threshold=signal_threshold)
+            signals = generate_signals(model, X_test, dates_test, symbol)
             
             # Run backtest
             print(f"  Running backtest...")

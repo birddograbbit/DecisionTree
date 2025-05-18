@@ -114,7 +114,6 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
             'name': 'Decision Tree',
             'model_type': 'decision_tree',
             'model_params': {'max_depth': 5, 'min_samples_split': 5, 'calibrate': False},
-            'threshold': 0.65,
             'position_sizing': 'fixed',
             'symbol': symbol
         },
@@ -122,7 +121,6 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
             'name': 'Decision Tree (Calibrated)',
             'model_type': 'decision_tree',
             'model_params': {'max_depth': 5, 'min_samples_split': 5, 'calibrate': True},
-            'threshold': 0.65,
             'position_sizing': 'fixed',
             'symbol': symbol
         },
@@ -130,7 +128,6 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
             'name': 'Random Forest',
             'model_type': 'random_forest',
             'model_params': {'n_estimators': 100, 'max_depth': 5, 'calibrate': False},
-            'threshold': 0.65,
             'position_sizing': 'fixed',
             'symbol': symbol
         },
@@ -138,7 +135,6 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
             'name': 'Random Forest (Calibrated)',
             'model_type': 'random_forest',
             'model_params': {'n_estimators': 100, 'max_depth': 5, 'calibrate': True},
-            'threshold': 0.65,
             'position_sizing': 'fixed',
             'symbol': symbol
         }
@@ -150,7 +146,6 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
             'name': 'XGBoost',
             'model_type': 'xgboost',
             'model_params': {'n_estimators': 100, 'max_depth': 5, 'learning_rate': 0.1},
-            'threshold': 0.65,
             'position_sizing': 'fixed',
             'symbol': symbol
         })
@@ -159,7 +154,6 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
             'name': 'XGBoost (Confidence)',
             'model_type': 'xgboost',
             'model_params': {'n_estimators': 100, 'max_depth': 5, 'learning_rate': 0.1},
-            'threshold': 0.65,
             'position_sizing': 'confidence',
             'symbol': symbol
         })
@@ -184,7 +178,6 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
             'cv': 5,
             'use_features': False
         },
-        'threshold': 0.65,
         'position_sizing': 'fixed',
         'symbol': symbol
     })
@@ -204,55 +197,46 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
     # Define regime-specific parameters
     regime_params = {
         'strong_uptrend': {
-            'threshold': 0.6,           # More aggressive entry
             'position_size_pct': 0.15,  # Larger position size
             'stop_loss_pct': 0.05,      # Standard stop loss
             'take_profit_pct': 0.15     # Generous take profit
         },
         'uptrend': {
-            'threshold': 0.65,          # Standard entry
             'position_size_pct': 0.1,   # Standard position size
             'stop_loss_pct': 0.05,      # Standard stop loss
             'take_profit_pct': 0.1      # Standard take profit
         },
         'weak_uptrend': {
-            'threshold': 0.7,           # More conservative entry
             'position_size_pct': 0.05,  # Smaller position size
             'stop_loss_pct': 0.03,      # Tighter stop loss
             'take_profit_pct': 0.07     # More conservative take profit
         },
         'volatile_neutral': {
-            'threshold': 0.75,          # Very conservative entry
             'position_size_pct': 0.03,  # Minimal position size
             'stop_loss_pct': 0.02,      # Very tight stop loss
             'take_profit_pct': 0.05     # Modest take profit
         },
         'neutral': {
-            'threshold': 0.7,           # More conservative entry
             'position_size_pct': 0.05,  # Smaller position size
             'stop_loss_pct': 0.03,      # Tighter stop loss
             'take_profit_pct': 0.07     # More conservative take profit
         },
         'low_vol_neutral': {
-            'threshold': 0.65,          # Standard entry
             'position_size_pct': 0.08,  # Moderate position size
             'stop_loss_pct': 0.04,      # Moderate stop loss
             'take_profit_pct': 0.08     # Moderate take profit
         },
         'weak_downtrend': {
-            'threshold': 0.75,          # Very conservative entry (high confidence)
             'position_size_pct': 0.03,  # Minimal position size
             'stop_loss_pct': 0.02,      # Very tight stop loss
             'take_profit_pct': 0.05     # Modest take profit
         },
         'downtrend': {
-            'threshold': 0.8,           # Extremely conservative entry
             'position_size_pct': 0.02,  # Minimal position size
             'stop_loss_pct': 0.02,      # Very tight stop loss
             'take_profit_pct': 0.05     # Modest take profit
         },
         'strong_downtrend': {
-            'threshold': 0.85,          # Nearly avoid trading
             'position_size_pct': 0.01,  # Smallest position size
             'stop_loss_pct': 0.01,      # Tightest stop loss
             'take_profit_pct': 0.03     # Small take profit
@@ -500,7 +484,6 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         'name': model_type.title(),
         'model_type': model_type,
         'model_params': model_params,
-        'threshold': 0.65,
         'position_sizing': 'fixed',
         'symbol': symbol
     }
@@ -523,55 +506,46 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         # Define regime-specific parameters
         config['regime_params'] = {
             'strong_uptrend': {
-                'threshold': 0.6,           # More aggressive entry
                 'position_size_pct': 0.15,  # Larger position size
                 'stop_loss_pct': 0.05,      # Standard stop loss
                 'take_profit_pct': 0.15     # Generous take profit
             },
             'uptrend': {
-                'threshold': 0.65,          # Standard entry
                 'position_size_pct': 0.1,   # Standard position size
                 'stop_loss_pct': 0.05,      # Standard stop loss
                 'take_profit_pct': 0.1      # Standard take profit
             },
             'weak_uptrend': {
-                'threshold': 0.7,           # More conservative entry
                 'position_size_pct': 0.05,  # Smaller position size
                 'stop_loss_pct': 0.03,      # Tighter stop loss
                 'take_profit_pct': 0.07     # More conservative take profit
             },
             'volatile_neutral': {
-                'threshold': 0.75,          # Very conservative entry
                 'position_size_pct': 0.03,  # Minimal position size
                 'stop_loss_pct': 0.02,      # Very tight stop loss
                 'take_profit_pct': 0.05     # Modest take profit
             },
             'neutral': {
-                'threshold': 0.7,           # More conservative entry
                 'position_size_pct': 0.05,  # Smaller position size
                 'stop_loss_pct': 0.03,      # Tighter stop loss
                 'take_profit_pct': 0.07     # More conservative take profit
             },
             'low_vol_neutral': {
-                'threshold': 0.65,          # Standard entry
                 'position_size_pct': 0.08,  # Moderate position size
                 'stop_loss_pct': 0.04,      # Moderate stop loss
                 'take_profit_pct': 0.08     # Moderate take profit
             },
             'weak_downtrend': {
-                'threshold': 0.75,          # Very conservative entry (high confidence)
                 'position_size_pct': 0.03,  # Minimal position size
                 'stop_loss_pct': 0.02,      # Very tight stop loss
                 'take_profit_pct': 0.05     # Modest take profit
             },
             'downtrend': {
-                'threshold': 0.8,           # Extremely conservative entry
                 'position_size_pct': 0.02,  # Minimal position size
                 'stop_loss_pct': 0.02,      # Very tight stop loss
                 'take_profit_pct': 0.05     # Modest take profit
             },
             'strong_downtrend': {
-                'threshold': 0.85,          # Nearly avoid trading
                 'position_size_pct': 0.01,  # Smallest position size
                 'stop_loss_pct': 0.01,      # Tightest stop loss
                 'take_profit_pct': 0.03     # Small take profit

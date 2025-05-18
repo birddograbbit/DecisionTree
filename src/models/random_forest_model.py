@@ -193,3 +193,4 @@ class RandomForestModel(BaseModel):
         calib_str = ", calibrated" if self.calibrate else ""
         return f"RandomForestModel(n_estimators={self.params['n_estimators']}, " \
                f"max_depth={self.params['max_depth']}{calib_str})"
+

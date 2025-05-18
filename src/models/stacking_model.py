@@ -340,3 +340,4 @@ class StackingModel(BaseModel):
             meta_model_str = "None"
             
         return f"StackingModel(base_models={len(self.base_models)}, meta_model={meta_model_str}, cv={self.cv})"
+

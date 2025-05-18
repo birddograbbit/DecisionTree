@@ -89,3 +89,4 @@ class BaseModel(ABC):
             Loaded model instance
         """
         pass
+

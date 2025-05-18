@@ -21,10 +21,9 @@ class SignalEngine:
         Parameters:
         -----------
         position_sizing : str, default=None
-            Legacy parameter - using probability-based sizing now
+            Position sizing method
         """
-        # Kept for backward compatibility, but not used anymore
-        # Global thresholds BUY_THRESHOLD and SELL_THRESHOLD are used instead
+        # Kept for backward compatibility
         self.position_sizing = position_sizing
 
     def generate_signals(self, predictions, dates, symbol='SPY'):
@@ -53,7 +52,7 @@ class SignalEngine:
         signals = []
 
         for i, probability in enumerate(predictions):
-            # Determine signal based on threshold
+            # Determine signal using global thresholds
             if probability >= BUY_THRESHOLD:  # Buy signal
                 signal = 1
             elif probability <= SELL_THRESHOLD:  # Sell signal

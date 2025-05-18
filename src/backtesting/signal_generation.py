@@ -142,7 +142,8 @@ def calculate_positions(signals_df, initial_capital=100000, price_data=None):
     # Calculate positions
     position = 0
     capital = initial_capital
-    
+    prev_position = 0
+
     for i in range(len(positions_df)):
         signal = positions_df.iloc[i]['signal']
 

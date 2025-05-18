@@ -210,5 +210,3 @@ class SignalEngine:
                 result.loc[result.index[i], 'entry_price'] = entry_price
         
         return result
-
-      

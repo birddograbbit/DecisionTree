@@ -234,15 +234,18 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
                     
                     # Import from src
                     from src.models.xgboost_model import XGBoostModel
+                    from sklearn.pipeline import make_pipeline
+                    from sklearn.preprocessing import StandardScaler
                     
                     # Create a dedicated XGBoostModel with current trial parameters
                     custom_model = XGBoostModel(**params)
                     
-                    # Train the model on this fold
-                    custom_model.train(X_train, y_train)
+                    # Create a proper pipeline for each fold and explicitly fit it
+                    pipeline = make_pipeline(StandardScaler(), custom_model)
+                    pipeline.fit(X_train, y_train)
                     
-                    # Get predictions
-                    y_pred = custom_model.predict(X_test)
+                    # Use the pipeline for prediction
+                    y_pred = pipeline.predict_proba(X_test)[:, 1]  # Get probabilities for positive class
                     y_pred_binary = (y_pred > 0.5).astype(int)
                     
                     # Calculate accuracy

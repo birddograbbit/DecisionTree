@@ -5,6 +5,7 @@ Signal engine for generating trading signals from model predictions.
 import pandas as pd
 import numpy as np
 from src.strategies.base_strategy import BUY_THRESHOLD, SELL_THRESHOLD
+from src.utils.adaptive_thresholds import are_adaptive_thresholds_needed, calculate_adaptive_thresholds
 
 class SignalEngine:
     """
@@ -28,9 +29,36 @@ class SignalEngine:
         """
         # Global BUY_THRESHOLD and SELL_THRESHOLD apply for all engines.
         self.position_sizing = position_sizing
-
+        self.buy_threshold = BUY_THRESHOLD
+        self.sell_threshold = SELL_THRESHOLD
+        self.use_adaptive_thresholds = False
         
-    def generate_signals(self, predictions, dates, symbol='SPY'):
+    def check_for_adaptive_thresholds(self, predictions):
+        """
+        Check if adaptive thresholds should be used based on the prediction distribution.
+        
+        Parameters:
+        -----------
+        predictions : np.ndarray
+            Predicted probabilities from model
+            
+        Returns:
+        --------
+        tuple
+            (should_use_adaptive, buy_threshold, sell_threshold)
+        """
+        if are_adaptive_thresholds_needed(predictions):
+            self.use_adaptive_thresholds = True
+            buy_threshold, sell_threshold = calculate_adaptive_thresholds(predictions)
+            
+            # Log the adaptive thresholds
+            print(f"Using adaptive thresholds in SignalEngine: buy={buy_threshold:.4f}, sell={sell_threshold:.4f}")
+            
+            return True, buy_threshold, sell_threshold
+            
+        return False, self.buy_threshold, self.sell_threshold
+        
+    def generate_signals(self, predictions, dates, symbol='SPY', custom_thresholds=None):
         """
         Generate trading signals from model predictions.
         
@@ -42,6 +70,8 @@ class SignalEngine:
             Dates corresponding to predictions
         symbol : str, default='SPY'
             Trading symbol
+        custom_thresholds : tuple, optional
+            Custom (buy_threshold, sell_threshold) to use
             
         Returns:
         --------
@@ -51,15 +81,21 @@ class SignalEngine:
         # Ensure dates is a pandas Series or DatetimeIndex
         if not isinstance(dates, (pd.Series, pd.DatetimeIndex)):
             dates = pd.Series(dates)
+            
+        # Check if we should use adaptive thresholds
+        if custom_thresholds:
+            buy_threshold, sell_threshold = custom_thresholds
+        else:
+            _, buy_threshold, sell_threshold = self.check_for_adaptive_thresholds(predictions)
 
         # Create signals DataFrame
         signals = []
 
         for i, probability in enumerate(predictions):
-            # Determine signal using global thresholds
-            if probability >= BUY_THRESHOLD:        # Buy signal
+            # Determine signal using thresholds
+            if probability >= buy_threshold:        # Buy signal
                 signal = 1
-            elif probability <= SELL_THRESHOLD:     # Sell signal
+            elif probability <= sell_threshold:     # Sell signal
                 signal = -1
             else:                                   # Hold
                 signal = 0

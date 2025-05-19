@@ -9,6 +9,7 @@ from src.engines.model_engine import ModelEngine
 from src.engines.signal_engine import SignalEngine
 from src.features.feature_engineering import engineer_features
 from src.backtesting.engine import BacktestEngine
+from src.utils.adaptive_thresholds import are_adaptive_thresholds_needed, calculate_adaptive_thresholds
 
 class TrendFollowingStrategy(BaseStrategy):
     """
@@ -31,6 +32,9 @@ class TrendFollowingStrategy(BaseStrategy):
             - position_sizing (str, optional): Position sizing method for
               ``SignalEngine`` ('fixed' or 'confidence')
         """
+        # Call parent initialize to setup thresholds
+        super().initialize(config)
+        
         # Store configuration
         self.config = config
         
@@ -48,6 +52,16 @@ class TrendFollowingStrategy(BaseStrategy):
         # Store strategy state
         self.is_trained = False
         self.metrics = {}
+        
+        # Adaptive thresholds settings
+        self.use_adaptive_thresholds = config.get('use_adaptive_thresholds', 'auto')  # 'auto', 'always', 'never'
+        
+        # Custom thresholds if specified
+        if 'buy_threshold' in config and 'sell_threshold' in config:
+            self.buy_threshold = config['buy_threshold']
+            self.sell_threshold = config['sell_threshold']
+            self.signal_engine.buy_threshold = config['buy_threshold']
+            self.signal_engine.sell_threshold = config['sell_threshold']
 
     def generate_features(self, data):
         """
@@ -84,11 +98,36 @@ class TrendFollowingStrategy(BaseStrategy):
         pd.DataFrame
             Trading signals
         """
+        # Call parent method to check for adaptive thresholds
+        super().generate_signals(features, predictions, dates)
+        
+        # Determine if we should use adaptive thresholds
+        custom_thresholds = None
+        if self.use_adaptive_thresholds == 'always' or (self.use_adaptive_thresholds == 'auto' and are_adaptive_thresholds_needed(predictions)):
+            # Calculate adaptive thresholds
+            buy_threshold, sell_threshold = calculate_adaptive_thresholds(
+                predictions,
+                buy_percentile=self.config.get('buy_percentile', 80),
+                sell_percentile=self.config.get('sell_percentile', 20)
+            )
+            custom_thresholds = (buy_threshold, sell_threshold)
+            
+            # Log the adaptive thresholds
+            stats = {
+                'min': float(np.min(predictions)),
+                'max': float(np.max(predictions)),
+                'mean': float(np.mean(predictions)),
+                'range': float(np.max(predictions) - np.min(predictions))
+            }
+            print(f"\nUsing adaptive thresholds: buy={buy_threshold:.4f}, sell={sell_threshold:.4f}")
+            print(f"Prediction stats: min={stats['min']:.4f}, max={stats['max']:.4f}, mean={stats['mean']:.4f}, range={stats['range']:.4f}")
+        
         # Generate raw signals
         signals = self.signal_engine.generate_signals(
             predictions, 
             dates, 
-            symbol=self.config.get('symbol', 'SPY')
+            symbol=self.config.get('symbol', 'SPY'),
+            custom_thresholds=custom_thresholds
         )
         
         # Apply signal filters
@@ -161,12 +200,24 @@ class TrendFollowingStrategy(BaseStrategy):
         print(f"Min prediction: {np.min(predictions)}, Max prediction: {np.max(predictions)}, Mean prediction: {np.mean(predictions)}")
         # --- End Debugging ---
 
+        # Check if we need adaptive thresholds
+        custom_thresholds = None
+        if self.use_adaptive_thresholds == 'always' or (self.use_adaptive_thresholds == 'auto' and are_adaptive_thresholds_needed(predictions)):
+            # Calculate adaptive thresholds for raw signals display
+            buy_threshold, sell_threshold = calculate_adaptive_thresholds(
+                predictions,
+                buy_percentile=self.config.get('buy_percentile', 80),
+                sell_percentile=self.config.get('sell_percentile', 20)
+            )
+            custom_thresholds = (buy_threshold, sell_threshold)
+
         # Generate signals (before filtering in the main generate_signals method)
         # We call the signal_engine.generate_signals directly here for a raw look
         raw_signals_df = self.signal_engine.generate_signals(
             predictions,
             dates_test,
-            symbol=self.config.get('symbol', 'SPY')
+            symbol=self.config.get('symbol', 'SPY'),
+            custom_thresholds=custom_thresholds
         )
         # --- Debugging: Print raw signals ---
         print("\n--- Raw Signals (Before main apply_filters in TrendFollowingStrategy.generate_signals) ---")

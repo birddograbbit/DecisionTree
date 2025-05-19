@@ -19,6 +19,7 @@ from src.data.preprocessing import preprocess_data
 from src.strategies.trend_following import TrendFollowingStrategy
 from src.strategies.regime_adaptive_strategy import RegimeAdaptiveStrategy
 from src.models.model_factory import ModelFactory
+from strategy_configs import STRATEGY_CONFIGS
 
 def load_data(data_path, symbol='SPY'):
     """
@@ -108,144 +109,21 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
     print(f"Training data: {len(train_data)} rows ({train_data.index[0]} to {train_data.index[-1]})")
     print(f"Testing data: {len(test_data)} rows ({test_data.index[0]} to {test_data.index[-1]})")
     
-    # Define strategy configurations to compare
+    # Use predefined strategy configurations from strategy_configs.py
     strategy_configs = [
-        {
-            'name': 'Decision Tree',
-            'model_type': 'decision_tree',
-            'model_params': {'max_depth': 5, 'min_samples_split': 5, 'calibrate': False},
-            'symbol': symbol
-        },
-        {
-            'name': 'Decision Tree (Calibrated)',
-            'model_type': 'decision_tree',
-            'model_params': {'max_depth': 5, 'min_samples_split': 5, 'calibrate': True},
-            'symbol': symbol
-        },
-        {
-            'name': 'Random Forest',
-            'model_type': 'random_forest',
-            'model_params': {'n_estimators': 100, 'max_depth': 5, 'calibrate': False},
-            'symbol': symbol
-        },
-        {
-            'name': 'Random Forest (Calibrated)',
-            'model_type': 'random_forest',
-            'model_params': {'n_estimators': 100, 'max_depth': 5, 'calibrate': True},
-            'symbol': symbol
-        }
+        STRATEGY_CONFIGS['decision_tree'],
+        STRATEGY_CONFIGS['decision_tree_calibrated'],
+        STRATEGY_CONFIGS['random_forest'],
+        STRATEGY_CONFIGS['random_forest_calibrated'],
+        STRATEGY_CONFIGS['xgboost_fixed'],
+        STRATEGY_CONFIGS['xgboost_confidence'],
+        STRATEGY_CONFIGS['stacking'],
+        STRATEGY_CONFIGS['regime_adaptive_rf']
     ]
     
-    # Add XGBoost configuration if available
-    if 'xgboost' in ModelFactory.get_available_models():
-        strategy_configs.append({
-            'name': 'XGBoost (Fixed Position)',
-            'model_type': 'xgboost',
-            'model_params': {'n_estimators': 100, 'max_depth': 5, 'learning_rate': 0.1},
-            'symbol': symbol,
-            'position_sizing': 'fixed'  # Fixed position size of 1.0 for all trades
-        })
-        
-        strategy_configs.append({
-            'name': 'XGBoost (Confidence-Scaled)',
-            'model_type': 'xgboost',
-            'model_params': {'n_estimators': 100, 'max_depth': 5, 'learning_rate': 0.1},
-            'symbol': symbol
-            # Uses default 'confidence' position sizing that scales with prediction strength
-        })
-    
-    # Add Stacking model configuration
-    base_models = []
-    
-    # Add Decision Tree and Random Forest as base models
-    base_models.append({'model_type': 'decision_tree', 'model_params': {'max_depth': 5, 'calibrate': True}})
-    base_models.append({'model_type': 'random_forest', 'model_params': {'n_estimators': 100, 'max_depth': 5, 'calibrate': True}})
-    
-    # Add XGBoost if available
-    if 'xgboost' in ModelFactory.get_available_models():
-        base_models.append({'model_type': 'xgboost', 'model_params': {'n_estimators': 100, 'max_depth': 5, 'learning_rate': 0.1}})
-    
-        strategy_configs.append({
-            'name': 'Stacking Ensemble',
-            'model_type': 'stacking',
-            'model_params': {
-                'base_models': base_models,
-                'meta_model': {'model_type': 'random_forest', 'model_params': {'n_estimators': 100, 'max_depth': 3}},
-                'cv': 5,
-                'use_features': False
-        },
-        'symbol': symbol
-    })
-    
-    # Add Regime Adaptive Strategy
-    # Define regime detection configuration
-    regime_detection_config = {
-        'method': 'trend_volatility',
-        'params': {
-            'fast_window': 20,
-            'slow_window': 50,
-            'vol_window': 20,
-            'vol_threshold': 0.75
-        }
-    }
-    
-    # Define regime-specific parameters
-    regime_params = {
-        'strong_uptrend': {
-            'position_size_pct': 0.15,  # Larger position size
-            'stop_loss_pct': 0.05,      # Standard stop loss
-            'take_profit_pct': 0.15     # Generous take profit
-        },
-        'uptrend': {
-            'position_size_pct': 0.1,   # Standard position size
-            'stop_loss_pct': 0.05,      # Standard stop loss
-            'take_profit_pct': 0.1      # Standard take profit
-        },
-        'weak_uptrend': {
-            'position_size_pct': 0.05,  # Smaller position size
-            'stop_loss_pct': 0.03,      # Tighter stop loss
-            'take_profit_pct': 0.07     # More conservative take profit
-        },
-        'volatile_neutral': {
-            'position_size_pct': 0.03,  # Minimal position size
-            'stop_loss_pct': 0.02,      # Very tight stop loss
-            'take_profit_pct': 0.05     # Modest take profit
-        },
-        'neutral': {
-            'position_size_pct': 0.05,  # Smaller position size
-            'stop_loss_pct': 0.03,      # Tighter stop loss
-            'take_profit_pct': 0.07     # More conservative take profit
-        },
-        'low_vol_neutral': {
-            'position_size_pct': 0.08,  # Moderate position size
-            'stop_loss_pct': 0.04,      # Moderate stop loss
-            'take_profit_pct': 0.08     # Moderate take profit
-        },
-        'weak_downtrend': {
-            'position_size_pct': 0.03,  # Minimal position size
-            'stop_loss_pct': 0.02,      # Very tight stop loss
-            'take_profit_pct': 0.05     # Modest take profit
-        },
-        'downtrend': {
-            'position_size_pct': 0.02,  # Minimal position size
-            'stop_loss_pct': 0.02,      # Very tight stop loss
-            'take_profit_pct': 0.05     # Modest take profit
-        },
-        'strong_downtrend': {
-            'position_size_pct': 0.01,  # Smallest position size
-            'stop_loss_pct': 0.01,      # Tightest stop loss
-            'take_profit_pct': 0.03     # Small take profit
-        }
-    }
-    
-    # Create a regime adaptive config for random forest
-    rf_regime_config = strategy_configs[1].copy()  # Copy the random forest config
-    rf_regime_config['name'] = 'Regime Adaptive RF'
-    rf_regime_config['regime_detection'] = regime_detection_config
-    rf_regime_config['regime_params'] = regime_params
-    
-    # Add to strategy configs
-    strategy_configs.append(rf_regime_config)
+    # Set symbol for all configs
+    for config in strategy_configs:
+        config['symbol'] = symbol
     
     # Run strategies
     results = {}
@@ -268,7 +146,10 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
 
         # Store results
         results[config['name']] = backtest_results
-        equity_curves.append((config['name'], backtest_results['equity_curve']['equity']))
+        
+        # Check if equity curve exists
+        if 'equity_curve' in backtest_results and 'equity' in backtest_results['equity_curve']:
+            equity_curves.append((config['name'], backtest_results['equity_curve']['equity']))
 
         # Get all metrics
         metrics = {
@@ -288,26 +169,27 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         print(f"Win Rate: {performance.get('win_rate', 0):.2%}")
         print(f"Number of Trades: {performance.get('num_trades', 0)}")
 
-    # Plot equity curves
-    plt.figure(figsize=(12, 8))
+    # Plot equity curves if we have any
+    if equity_curves:
+        plt.figure(figsize=(12, 8))
 
-    # Add buy and hold equity curve for reference
-    buy_hold = (test_data['close'] / test_data['close'].iloc[0])
-    plt.plot(buy_hold.index, buy_hold, label='Buy & Hold', linestyle='--')
+        # Add buy and hold equity curve for reference
+        buy_hold = (test_data['close'] / test_data['close'].iloc[0])
+        plt.plot(buy_hold.index, buy_hold, label='Buy & Hold', linestyle='--')
 
-    # Plot strategy equity curves
-    for name, equity in equity_curves:
-        # Normalize to start at 1.0
-        normalized_equity = equity / equity.iloc[0]
-        plt.plot(equity.index, normalized_equity, label=name)
+        # Plot strategy equity curves
+        for name, equity in equity_curves:
+            # Normalize to start at 1.0
+            normalized_equity = equity / equity.iloc[0]
+            plt.plot(equity.index, normalized_equity, label=name)
 
-    plt.title('Equity Curves Comparison')
-    plt.xlabel('Date')
-    plt.ylabel('Equity (normalized)')
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'equity_curves_comparison.png'))
+        plt.title('Equity Curves Comparison')
+        plt.xlabel('Date')
+        plt.ylabel('Equity (normalized)')
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, 'equity_curves_comparison.png'))
 
     # Create metrics DataFrame
     metrics_df = pd.DataFrame(metrics_list)
@@ -319,7 +201,8 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         os.makedirs(result_dir, exist_ok=True)
 
         # Save equity curve
-        result['equity_curve'].to_csv(os.path.join(result_dir, 'equity_curve.csv'))
+        if 'equity_curve' in result:
+            result['equity_curve'].to_csv(os.path.join(result_dir, 'equity_curve.csv'))
 
         # Save trades
         if 'trades' in result and not result['trades'].empty:
@@ -447,111 +330,75 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         train_data = df.iloc[:train_size]
         test_data = df.iloc[train_size:]
     
-    # Handle special case for stacking model
-    if model_type == 'stacking':
-        # Create default stacking configuration
-        base_models = []
-        
-        # Add Decision Tree and Random Forest as base models
-        base_models.append({'model_type': 'decision_tree', 'model_params': {'max_depth': 5, 'calibrate': calibrate}})
-        base_models.append({'model_type': 'random_forest', 'model_params': {'n_estimators': 100, 'max_depth': 5, 'calibrate': calibrate}})
-        
-        # Add XGBoost if available
-        if 'xgboost' in ModelFactory.get_available_models():
-            base_models.append({'model_type': 'xgboost', 'model_params': {'n_estimators': 100, 'max_depth': 5, 'learning_rate': 0.1}})
-        
-        model_params = {
-            'base_models': base_models,
-            'meta_model': {'model_type': 'random_forest', 'model_params': {'n_estimators': 100, 'max_depth': 3, 'calibrate': calibrate}},
-            'cv': 5,
-            'use_features': False
-        }
+    # Select appropriate configuration from STRATEGY_CONFIGS
+    config_key = None
+    
+    if model_type == 'decision_tree':
+        config_key = 'decision_tree_calibrated' if calibrate else 'decision_tree'
+    elif model_type == 'random_forest':
+        config_key = 'random_forest_calibrated' if calibrate else 'random_forest'
+    elif model_type == 'xgboost':
+        config_key = 'xgboost_confidence'  # Default to confidence-based position sizing
+    elif model_type == 'stacking':
+        config_key = 'stacking'
+    
+    if strategy_type == 'regime_adaptive' and model_type == 'random_forest':
+        config_key = 'regime_adaptive_rf'
+    
+    # Get configuration
+    if config_key and config_key in STRATEGY_CONFIGS:
+        config = STRATEGY_CONFIGS[config_key].copy()
     else:
-        # Use default parameters for other model types
-        model_params = ModelFactory.get_default_params(model_type)
-        
-        # Add calibrate flag for tree-based models
-        if model_type in ['decision_tree', 'random_forest']:
-            model_params['calibrate'] = calibrate
-    
-    # Configure strategy
-    config = {
-        'name': model_type.title(),
-        'model_type': model_type,
-        'model_params': model_params,
-        'symbol': symbol
-    }
-    
-    # Add regime detection configuration for regime adaptive strategy
-    if strategy_type == 'regime_adaptive':
-        config['name'] = f"Regime Adaptive {model_type.title()}"
-        
-        # Define regime detection configuration
-        config['regime_detection'] = {
-            'method': 'trend_volatility',
-            'params': {
-                'fast_window': 20,
-                'slow_window': 50,
-                'vol_window': 20,
-                'vol_threshold': 0.75
-            }
+        # Fallback to basic configuration
+        config = {
+            'name': model_type.title(),
+            'model_type': model_type,
+            'model_params': ModelFactory.get_default_params(model_type),
+            'use_adaptive_thresholds': 'auto'
         }
         
-        # Define regime-specific parameters
-        config['regime_params'] = {
-            'strong_uptrend': {
-                'position_size_pct': 0.15,  # Larger position size
-                'stop_loss_pct': 0.05,      # Standard stop loss
-                'take_profit_pct': 0.15     # Generous take profit
-            },
-            'uptrend': {
-                'position_size_pct': 0.1,   # Standard position size
-                'stop_loss_pct': 0.05,      # Standard stop loss
-                'take_profit_pct': 0.1      # Standard take profit
-            },
-            'weak_uptrend': {
-                'position_size_pct': 0.05,  # Smaller position size
-                'stop_loss_pct': 0.03,      # Tighter stop loss
-                'take_profit_pct': 0.07     # More conservative take profit
-            },
-            'volatile_neutral': {
-                'position_size_pct': 0.03,  # Minimal position size
-                'stop_loss_pct': 0.02,      # Very tight stop loss
-                'take_profit_pct': 0.05     # Modest take profit
-            },
-            'neutral': {
-                'position_size_pct': 0.05,  # Smaller position size
-                'stop_loss_pct': 0.03,      # Tighter stop loss
-                'take_profit_pct': 0.07     # More conservative take profit
-            },
-            'low_vol_neutral': {
-                'position_size_pct': 0.08,  # Moderate position size
-                'stop_loss_pct': 0.04,      # Moderate stop loss
-                'take_profit_pct': 0.08     # Moderate take profit
-            },
-            'weak_downtrend': {
-                'position_size_pct': 0.03,  # Minimal position size
-                'stop_loss_pct': 0.02,      # Very tight stop loss
-                'take_profit_pct': 0.05     # Modest take profit
-            },
-            'downtrend': {
-                'position_size_pct': 0.02,  # Minimal position size
-                'stop_loss_pct': 0.02,      # Very tight stop loss
-                'take_profit_pct': 0.05     # Modest take profit
-            },
-            'strong_downtrend': {
-                'position_size_pct': 0.01,  # Smallest position size
-                'stop_loss_pct': 0.01,      # Tightest stop loss
-                'take_profit_pct': 0.03     # Small take profit
-            }
-        }
+        # Add calibration flag for tree-based models
+        if model_type in ['decision_tree', 'random_forest'] and calibrate:
+            config['model_params']['calibrate'] = True
+            config['use_calibration'] = True
+            config['use_adaptive_thresholds'] = 'always'
+    
+    # Set symbol
+    config['symbol'] = symbol
     
     # Initialize and run strategy
     if strategy_type == 'regime_adaptive':
         strategy = RegimeAdaptiveStrategy()
+        config['name'] = f"Regime Adaptive {model_type.title()}"
+        
+        # Add regime detection if not present
+        if 'regime_detection' not in config:
+            config['regime_detection'] = {
+                'method': 'trend_volatility',
+                'params': {
+                    'fast_window': 20,
+                    'slow_window': 50,
+                    'vol_window': 20,
+                    'vol_threshold': 0.75
+                }
+            }
+            
+        # Add regime parameters if not present
+        if 'regime_params' not in config:
+            config['regime_params'] = {
+                'strong_uptrend': {'position_size_pct': 0.15, 'stop_loss_pct': 0.05, 'take_profit_pct': 0.15},
+                'uptrend': {'position_size_pct': 0.1, 'stop_loss_pct': 0.05, 'take_profit_pct': 0.1},
+                'weak_uptrend': {'position_size_pct': 0.05, 'stop_loss_pct': 0.03, 'take_profit_pct': 0.07},
+                'volatile_neutral': {'position_size_pct': 0.03, 'stop_loss_pct': 0.02, 'take_profit_pct': 0.05},
+                'neutral': {'position_size_pct': 0.05, 'stop_loss_pct': 0.03, 'take_profit_pct': 0.07},
+                'low_vol_neutral': {'position_size_pct': 0.08, 'stop_loss_pct': 0.04, 'take_profit_pct': 0.08},
+                'weak_downtrend': {'position_size_pct': 0.03, 'stop_loss_pct': 0.02, 'take_profit_pct': 0.05},
+                'downtrend': {'position_size_pct': 0.02, 'stop_loss_pct': 0.02, 'take_profit_pct': 0.05},
+                'strong_downtrend': {'position_size_pct': 0.01, 'stop_loss_pct': 0.01, 'take_profit_pct': 0.03}
+            }
     else:
         strategy = TrendFollowingStrategy()
-        
+    
     strategy.initialize(config)
     
     # Run backtest
@@ -562,7 +409,8 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     strategy.save(model_path)
     
     # Save equity curve
-    results['equity_curve'].to_csv(os.path.join(output_dir, 'equity_curve.csv'))
+    if 'equity_curve' in results:
+        results['equity_curve'].to_csv(os.path.join(output_dir, 'equity_curve.csv'))
     
     # Save trades
     if 'trades' in results and not results['trades'].empty:
@@ -571,21 +419,23 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     # Plot equity curve
     plt.figure(figsize=(12, 6))
     
-    # Strategy equity curve
-    equity = results['equity_curve']['equity']
-    plt.plot(equity.index, equity / equity.iloc[0], label=config['name'])
-    
-    # Buy and hold reference
-    buy_hold = (test_data['close'] / test_data['close'].iloc[0])
-    plt.plot(buy_hold.index, buy_hold, label='Buy & Hold', linestyle='--')
-    
-    plt.title(f'{config["name"]} Strategy vs Buy & Hold')
-    plt.xlabel('Date')
-    plt.ylabel('Equity (normalized)')
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'equity_curve.png'))
+    # Check if equity curve exists
+    if 'equity_curve' in results and 'equity' in results['equity_curve']:
+        # Strategy equity curve
+        equity = results['equity_curve']['equity']
+        plt.plot(equity.index, equity / equity.iloc[0], label=config['name'])
+        
+        # Buy and hold reference
+        buy_hold = (test_data['close'] / test_data['close'].iloc[0])
+        plt.plot(buy_hold.index, buy_hold, label='Buy & Hold', linestyle='--')
+        
+        plt.title(f'{config["name"]} Strategy vs Buy & Hold')
+        plt.xlabel('Date')
+        plt.ylabel('Equity (normalized)')
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, 'equity_curve.png'))
     
     # Print performance summary
     performance = results['performance']
@@ -675,6 +525,10 @@ def parse_arguments():
     
     parser.add_argument('--calibrate', action='store_true',
                         help='Use probability calibration for Decision Tree and Random Forest models')
+    
+    parser.add_argument('--adaptive-thresholds', type=str, 
+                        choices=['auto', 'always', 'never'], default='auto',
+                        help='Adaptive threshold behavior (default: auto)')
     
     return parser.parse_args()
 

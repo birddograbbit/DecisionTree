@@ -27,7 +27,7 @@ class ModelAdapter(BaseEstimator, ClassifierMixin):
     including methods like fit, predict, and predict_proba.
     """
     
-    def __init__(self, booster=None, use_sigmoid=True):
+    def __init__(self, booster=None, use_sigmoid=True, scaler=None):
         """
         Initialize the adapter.
         
@@ -37,23 +37,26 @@ class ModelAdapter(BaseEstimator, ClassifierMixin):
             Pretrained XGBoost booster (default: None)
         use_sigmoid : bool
             Whether to apply sigmoid to get probabilities (default: True)
+        scaler : sklearn.preprocessing.StandardScaler or None
+            Fitted scaler to preprocess input data (default: None)
         """
         self.booster = booster
         self.use_sigmoid = use_sigmoid
+        self.scaler = scaler
         print("Using ModelAdapter for scikit-learn compatibility")
         
     def fit(self, X, y=None, **kwargs):
         """
-        Dummy fit method for compatibility.
+        Fit method for compatibility.
         
-        Since the booster is already trained, this method does nothing.
+        If scaler is provided, it will be fitted on X.
         
         Parameters:
         -----------
-        X : Any
-            Not used
+        X : pd.DataFrame or numpy.ndarray
+            Feature matrix to fit the scaler (if provided)
         y : Any
-            Not used
+            Not used for the booster (already trained)
         kwargs : dict
             Additional arguments
             
@@ -62,6 +65,9 @@ class ModelAdapter(BaseEstimator, ClassifierMixin):
         self
             For method chaining
         """
+        # If scaler is provided but not fitted, fit it now
+        if self.scaler is not None and not hasattr(self.scaler, 'mean_'):
+            self.scaler = self.scaler.fit(X)
         return self
     
     def predict_proba(self, X):
@@ -78,6 +84,10 @@ class ModelAdapter(BaseEstimator, ClassifierMixin):
         numpy.ndarray
             Array of shape (n_samples, 2) with probabilities for both classes
         """
+        # Apply scaling if scaler is available
+        if self.scaler is not None:
+            X = self.scaler.transform(X)
+        
         # Convert to DMatrix
         dX = xgb.DMatrix(X)
         
@@ -295,8 +305,12 @@ class XGBoostModel(BaseModel):
         
         # Handle class imbalance
         if self.use_focal_loss:
+            # Create and fit a scaler first
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
+            
             # Use custom focal loss objective function
-            dtrain = xgb.DMatrix(X, label=y)
+            dtrain = xgb.DMatrix(X_scaled, label=y)
             focal_loss_obj = FocalLoss(gamma=self.focal_gamma, alpha=self.focal_alpha)
             
             # Update parameters for custom objective
@@ -312,12 +326,12 @@ class XGBoostModel(BaseModel):
                 obj=focal_loss_obj
             )
             
-            # Create a ModelAdapter to make the booster scikit-learn compatible
-            adapter = ModelAdapter(booster=booster, use_sigmoid=True)
+            # Create a ModelAdapter with the fitted scaler
+            adapter = ModelAdapter(booster=booster, use_sigmoid=True, scaler=scaler)
             
-            # Store the booster in base and the adapter in clf
+            # Store the booster in base and create a simple adapter (no pipeline needed)
             self._base = booster
-            self._clf = make_pipeline(StandardScaler(), adapter)
+            self._clf = adapter
             
             return self
             
@@ -368,12 +382,8 @@ class XGBoostModel(BaseModel):
         np.ndarray
             Predicted probabilities for positive class (class 1)
         """
-        if self.use_focal_loss:
-            # Get probabilities using the pipeline with ModelAdapter
-            return self._clf.predict_proba(X)[:, 1]
-        else:
-            # For standard objective
-            return self._clf.predict_proba(X)[:, 1]  # Probability of positive class
+        # Use predict_proba from the classifier or adapter
+        return self._clf.predict_proba(X)[:, 1]  # Probability of positive class
 
     def get_feature_importance(self):
         """

@@ -142,7 +142,8 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
             'name': 'XGBoost',
             'model_type': 'xgboost',
             'model_params': {'n_estimators': 100, 'max_depth': 5, 'learning_rate': 0.1},
-            'symbol': symbol
+            'symbol': symbol,
+            'position_sizing': 'fixed'
         })
         
         strategy_configs.append({

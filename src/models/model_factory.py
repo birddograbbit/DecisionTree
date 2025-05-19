@@ -22,7 +22,12 @@ from .decision_tree_model import DecisionTreeModel
 from .random_forest_model import RandomForestModel
 from .xgboost_model import XGBoostModel
 from .stacking_model import StackingModel
+from .hyperparameter_manager import HyperparameterManager
 import config
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 class ModelFactory:
     """
@@ -31,6 +36,23 @@ class ModelFactory:
     This class provides a centralized way to create different types of models
     with consistent interface, following the factory pattern.
     """
+
+    # Create a singleton instance of HyperparameterManager
+    _hyperparameter_manager = None
+    
+    @classmethod
+    def get_hyperparameter_manager(cls):
+        """
+        Get or create the HyperparameterManager instance.
+        
+        Returns:
+        --------
+        HyperparameterManager
+            Singleton instance of HyperparameterManager
+        """
+        if cls._hyperparameter_manager is None:
+            cls._hyperparameter_manager = HyperparameterManager()
+        return cls._hyperparameter_manager
 
     @staticmethod
     def create_model(model_type, **params):
@@ -56,6 +78,18 @@ class ModelFactory:
         ImportError
             If XGBoost is requested but not installed
         """
+        # Check if we should use optimized hyperparameters
+        use_optimized = params.pop('use_optimized', False)
+        regime = params.pop('regime', None)
+        
+        if use_optimized:
+            # Get hyperparameters from HyperparameterManager
+            hyperparams = ModelFactory.get_hyperparameter_manager().get_best_params(model_type, regime)
+            # Update with explicitly provided parameters (they take precedence)
+            hyperparams.update(params)
+            params = hyperparams
+            logger.info(f"Using optimized hyperparameters for {model_type}")
+            
         if model_type == 'decision_tree':
             calibrate = params.pop('calibrate', True)  # Changed default to True
             # Fix: Remove class_weight parameter if it exists as Decision Tree model doesn't support it
@@ -95,14 +129,23 @@ class ModelFactory:
             
             base_models = []
             for config in base_models_config:
-                model_type = config['model_type']
+                base_model_type = config['model_type']
                 model_params = config.get('model_params', {})
+                
+                # Apply optimized parameters to base models if requested
+                if use_optimized:
+                    optimized_params = ModelFactory.get_hyperparameter_manager().get_best_params(base_model_type, regime)
+                    # Update with explicitly provided parameters
+                    model_params_updated = optimized_params.copy()
+                    model_params_updated.update(model_params)
+                    model_params = model_params_updated
+                
                 try:
-                    base_model = ModelFactory.create_model(model_type, **model_params)
+                    base_model = ModelFactory.create_model(base_model_type, **model_params)
                     base_models.append(base_model)
                 except ImportError:
                     # Skip unavailable models (e.g., XGBoost if not installed)
-                    print(f"Warning: Model type '{model_type}' is not available. Skipping this base model.")
+                    logger.warning(f"Model type '{base_model_type}' is not available. Skipping this base model.")
             
             # Check if we should use a BaseModel for meta-model or direct sklearn model
             use_basemodel_metamodel = params.pop('use_basemodel_metamodel', False)
@@ -118,7 +161,7 @@ class ModelFactory:
                     try:
                         meta_model = ModelFactory.create_model(meta_model_type, **meta_model_params)
                     except ImportError:
-                        print(f"Warning: Meta-model type '{meta_model_type}' is not available. Using default.")
+                        logger.warning(f"Meta-model type '{meta_model_type}' is not available. Using default.")
                         meta_model = None
                         use_basemodel_metamodel = False
                 else:
@@ -261,25 +304,26 @@ class ModelFactory:
         else:
             raise ValueError(f"Unknown model type: {model_type}")
 
-    @staticmethod
-    def create_optimized_model(model_type, X, y, n_trials=None, n_splits=None, random_state=None):
+    @classmethod
+    def create_optimized_model(cls, model_type, X=None, y=None, n_trials=None, regime=None, 
+                               force_optimization=False):
         """
-        Create a model with optimized hyperparameters using Optuna.
+        Create a model with optimized hyperparameters using HyperparameterManager.
         
         Parameters:
         -----------
         model_type : str
             Type of model to create ('decision_tree', 'random_forest', 'xgboost')
-        X : pd.DataFrame
-            Feature matrix
-        y : pd.Series
-            Target values
+        X : pd.DataFrame or None
+            Feature matrix (required if force_optimization=True)
+        y : pd.Series or None
+            Target values (required if force_optimization=True)
         n_trials : int or None
             Number of optimization trials (default: from config)
-        n_splits : int or None
-            Number of splits for TimeSeriesSplit (default: from config)
-        random_state : int or None
-            Random seed for reproducibility (default: from config)
+        regime : str or None
+            Market regime (if provided, optimize for this specific regime)
+        force_optimization : bool
+            Whether to force optimization even if saved parameters exist
             
         Returns:
         --------
@@ -290,46 +334,21 @@ class ModelFactory:
         -------
         ImportError
             If Optuna is not installed
+        ValueError
+            If force_optimization=True but X or y is None
         """
-        if not OPTUNA_AVAILABLE:
+        if force_optimization and (X is None or y is None):
+            raise ValueError("X and y must be provided when force_optimization=True")
+            
+        if not OPTUNA_AVAILABLE and force_optimization:
             raise ImportError("Optuna is not installed. Cannot optimize hyperparameters.")
         
-        # Import here to avoid circular imports
-        from .hyperparameter_optimization import optimize_hyperparameters
-        
-        # Use default values from config if not specified
-        n_trials = n_trials if n_trials is not None else config.OPTUNA_TRIALS
-        n_splits = n_splits if n_splits is not None else config.TIMESERIES_CV_SPLITS
-        random_state = random_state if random_state is not None else config.RANDOM_STATE
-        
-        # Optimize hyperparameters
-        best_params = optimize_hyperparameters(
-            model_type, X, y, 
-            n_trials=n_trials, 
-            n_splits=n_splits, 
-            random_state=random_state
+        # Use HyperparameterManager to create optimized model
+        return cls.get_hyperparameter_manager().create_optimized_model(
+            model_type=model_type,
+            X=X,
+            y=y,
+            regime=regime,
+            force_optimization=force_optimization,
+            n_trials=n_trials
         )
-        
-        # Handle focal loss parameters separately for XGBoost
-        if model_type == 'xgboost':
-            use_focal_loss = best_params.pop('use_focal_loss', False)
-            focal_gamma = best_params.pop('focal_gamma', 2.0) if use_focal_loss else None
-            focal_alpha = best_params.pop('focal_alpha', 0.25) if use_focal_loss else None
-            
-            # Create model with best hyperparameters
-            model = ModelFactory.create_model(
-                model_type, 
-                use_focal_loss=use_focal_loss, 
-                focal_gamma=focal_gamma,
-                focal_alpha=focal_alpha,
-                **best_params
-            )
-        else:
-            # Fix: For decision tree, ensure class_weight is removed
-            if model_type == 'decision_tree' and 'class_weight' in best_params:
-                best_params.pop('class_weight')
-                
-            # Create model with best hyperparameters
-            model = ModelFactory.create_model(model_type, **best_params)
-        
-        return model

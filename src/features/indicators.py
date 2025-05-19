@@ -1,4 +1,5 @@
 # src/features/indicators.py
+
 """
 Module for calculating technical indicators.
 """
@@ -186,6 +187,112 @@ def calculate_atr(df, window=14):
     atr = true_range.rolling(window=window).mean()
     
     return atr
+
+def calculate_atr_zscore(df, atr_window=14, zscore_window=60):
+    """
+    Calculate ATR Z-Score (volatility normalization).
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        Price data with columns: high, low, close
+    atr_window : int
+        Lookback window for ATR calculation (default: 14)
+    zscore_window : int
+        Window for Z-Score normalization (default: 60)
+        
+    Returns:
+    --------
+    pd.Series
+        ATR Z-Score values
+    """
+    # Calculate ATR
+    atr = calculate_atr(df, window=atr_window)
+    
+    # Calculate ATR Z-Score
+    atr_mean = atr.rolling(window=zscore_window).mean()
+    atr_std = atr.rolling(window=zscore_window).std()
+    
+    # Avoid division by zero
+    atr_std = atr_std.replace(0, np.nan)
+    
+    atr_zscore = (atr - atr_mean) / atr_std
+    
+    return atr_zscore
+
+def calculate_adx(df, window=14):
+    """
+    Calculate Average Directional Index (ADX).
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        Price data with columns: high, low, close
+    window : int
+        Lookback window (default: 14)
+        
+    Returns:
+    --------
+    tuple
+        (ADX, +DI, -DI)
+    """
+    # Calculate the true range
+    true_range = calculate_atr(df, window=1)
+    
+    # Calculate directional movement
+    high_diff = df['high'].diff()
+    low_diff = df['low'].diff()
+    
+    # Calculate directional indicators
+    plus_dm = (high_diff > 0) & (high_diff > low_diff.abs()) * high_diff
+    minus_dm = (low_diff < 0) & (low_diff.abs() > high_diff) * low_diff.abs()
+    
+    # Smooth directional movements
+    plus_di = 100 * plus_dm.rolling(window=window).sum() / true_range.rolling(window=window).sum()
+    minus_di = 100 * minus_dm.rolling(window=window).sum() / true_range.rolling(window=window).sum()
+    
+    # Calculate directional index (DX)
+    dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+    
+    # Calculate ADX
+    adx = dx.rolling(window=window).mean()
+    
+    return adx, plus_di, minus_di
+
+def calculate_adx_momentum(df, adx_window=14, roc_window=10):
+    """
+    Calculate ADX Momentum (trend strength and direction).
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        Price data with columns: high, low, close
+    adx_window : int
+        Lookback window for ADX calculation (default: 14)
+    roc_window : int
+        Rate of change window (default: 10)
+        
+    Returns:
+    --------
+    pd.Series
+        ADX Momentum values
+    """
+    # Calculate ADX and directional indicators
+    adx, plus_di, minus_di = calculate_adx(df, window=adx_window)
+    
+    # Direction component (+1 for uptrend, -1 for downtrend)
+    direction = pd.Series(np.where(plus_di > minus_di, 1, -1), index=df.index)
+    
+    # Normalize ADX from 0-100 to 0-1 range
+    adx_norm = adx / 100
+    
+    # Combine trend strength (ADX) with direction
+    adx_dir = adx_norm * direction
+    
+    # Calculate momentum (rate of change)
+    adx_momentum = adx_dir.diff(roc_window)
+    
+    return adx_momentum
 
 def calculate_stochastic(df, k_period=14, d_period=3):
     """

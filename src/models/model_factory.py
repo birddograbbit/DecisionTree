@@ -10,10 +10,19 @@ except ImportError:
     print("Warning: XGBoost is not installed. XGBoostModel will not be available.")
     print("To install XGBoost: pip install xgboost")
 
+try:
+    import optuna
+    OPTUNA_AVAILABLE = True
+except ImportError:
+    OPTUNA_AVAILABLE = False
+    print("Warning: Optuna is not installed. Hyperparameter optimization will not be available.")
+    print("To install Optuna: pip install optuna")
+
 from .decision_tree_model import DecisionTreeModel
 from .random_forest_model import RandomForestModel
 from .xgboost_model import XGBoostModel
 from .stacking_model import StackingModel
+import config
 
 class ModelFactory:
     """
@@ -58,7 +67,20 @@ class ModelFactory:
         elif model_type == 'xgboost':
             if not XGBOOST_AVAILABLE:
                 raise ImportError("XGBoost is not installed. Cannot create XGBoostModel.")
-            return XGBoostModel(**params)
+            
+            # Handle class imbalance parameters
+            use_focal_loss = params.pop('use_focal_loss', False)
+            focal_gamma = params.pop('focal_gamma', 2.0)
+            focal_alpha = params.pop('focal_alpha', 0.25)
+            class_weight = params.pop('class_weight', None)
+            
+            return XGBoostModel(
+                use_focal_loss=use_focal_loss, 
+                focal_gamma=focal_gamma, 
+                focal_alpha=focal_alpha,
+                class_weight=class_weight,
+                **params
+            )
         
         elif model_type == 'stacking':
             # Special handling for stacking model creation
@@ -172,6 +194,7 @@ class ModelFactory:
                 'min_samples_leaf': 1,
                 'max_features': None,
                 'criterion': 'gini',
+                'class_weight': 'balanced',  # Added class weight
                 'random_state': 42
             }
         
@@ -184,6 +207,7 @@ class ModelFactory:
                 'min_samples_leaf': 1,
                 'max_features': 'sqrt',
                 'criterion': 'gini',
+                'class_weight': 'balanced',  # Added class weight
                 'random_state': 42,
                 'n_jobs': -1
             }
@@ -198,27 +222,36 @@ class ModelFactory:
                 'gamma': 0,
                 'objective': 'binary:logistic',
                 'random_state': 42,
-                'n_jobs': -1
+                'n_jobs': -1,
+                'use_focal_loss': False,  # Added focal loss parameter
+                'focal_gamma': 2.0,       # Added focal loss gamma
+                'focal_alpha': 0.25,      # Added focal loss alpha
+                'class_weight': 'balanced'  # Added class weight
             }
         
         elif model_type == 'stacking':
             params = {
                 'base_models': [
-                    {'model_type': 'decision_tree', 'model_params': {'max_depth': 5}},
-                    {'model_type': 'random_forest', 'model_params': {'n_estimators': 100, 'max_depth': 5}}
+                    {'model_type': 'decision_tree', 'model_params': {'max_depth': 5, 'class_weight': 'balanced'}},
+                    {'model_type': 'random_forest', 'model_params': {'n_estimators': 100, 'max_depth': 5, 'class_weight': 'balanced'}}
                 ],
                 'cv': 5,
                 'use_features': False,
                 'use_basemodel_metamodel': False,
                 'meta_model_type': 'logistic_regression',
-                'meta_model_params': {'C': 1.0, 'random_state': 42}
+                'meta_model_params': {'C': 1.0, 'max_iter': 1000, 'random_state': 42}  # Increased max_iter
             }
             
             # Add XGBoost as base model if available
             if XGBOOST_AVAILABLE:
                 params['base_models'].append({
                     'model_type': 'xgboost', 
-                    'model_params': {'n_estimators': 100, 'max_depth': 5, 'learning_rate': 0.1}
+                    'model_params': {
+                        'n_estimators': 100, 
+                        'max_depth': 5, 
+                        'learning_rate': 0.1,
+                        'class_weight': 'balanced'
+                    }
                 })
                 
             return params
@@ -226,3 +259,71 @@ class ModelFactory:
         else:
             raise ValueError(f"Unknown model type: {model_type}")
 
+    @staticmethod
+    def create_optimized_model(model_type, X, y, n_trials=None, n_splits=None, random_state=None):
+        """
+        Create a model with optimized hyperparameters using Optuna.
+        
+        Parameters:
+        -----------
+        model_type : str
+            Type of model to create ('decision_tree', 'random_forest', 'xgboost')
+        X : pd.DataFrame
+            Feature matrix
+        y : pd.Series
+            Target values
+        n_trials : int or None
+            Number of optimization trials (default: from config)
+        n_splits : int or None
+            Number of splits for TimeSeriesSplit (default: from config)
+        random_state : int or None
+            Random seed for reproducibility (default: from config)
+            
+        Returns:
+        --------
+        BaseModel
+            Instance of the optimized model
+            
+        Raises:
+        -------
+        ImportError
+            If Optuna is not installed
+        """
+        if not OPTUNA_AVAILABLE:
+            raise ImportError("Optuna is not installed. Cannot optimize hyperparameters.")
+        
+        # Import here to avoid circular imports
+        from .hyperparameter_optimization import optimize_hyperparameters
+        
+        # Use default values from config if not specified
+        n_trials = n_trials if n_trials is not None else config.OPTUNA_TRIALS
+        n_splits = n_splits if n_splits is not None else config.TIMESERIES_CV_SPLITS
+        random_state = random_state if random_state is not None else config.RANDOM_STATE
+        
+        # Optimize hyperparameters
+        best_params = optimize_hyperparameters(
+            model_type, X, y, 
+            n_trials=n_trials, 
+            n_splits=n_splits, 
+            random_state=random_state
+        )
+        
+        # Handle focal loss parameters separately for XGBoost
+        if model_type == 'xgboost':
+            use_focal_loss = best_params.pop('use_focal_loss', False)
+            focal_gamma = best_params.pop('focal_gamma', 2.0) if use_focal_loss else None
+            focal_alpha = best_params.pop('focal_alpha', 0.25) if use_focal_loss else None
+            
+            # Create model with best hyperparameters
+            model = ModelFactory.create_model(
+                model_type, 
+                use_focal_loss=use_focal_loss, 
+                focal_gamma=focal_gamma,
+                focal_alpha=focal_alpha,
+                **best_params
+            )
+        else:
+            # Create model with best hyperparameters
+            model = ModelFactory.create_model(model_type, **best_params)
+        
+        return model

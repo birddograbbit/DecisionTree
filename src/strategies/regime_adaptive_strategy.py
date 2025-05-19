@@ -223,9 +223,15 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
         
         # Override with regime-specific parameters if available
         if regime_label in self.regime_params:
-            regime_specific = self.regime_params.get(regime_label, {})
+            regime_specific = self.regime_params.get(regime_label, {}).copy()
+
+            # Apply lower thresholds if requested and explicit values aren't provided
+            use_low = regime_specific.pop('use_low_thresholds', False)
             params.update(regime_specific)
-        
+            if use_low:
+                params['buy_threshold'] = params.get('buy_threshold', 0.55)
+                params['sell_threshold'] = params.get('sell_threshold', 0.45)
+
         return params
 
     def generate_signals(self, features, predictions, dates):

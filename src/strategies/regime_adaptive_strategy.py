@@ -296,6 +296,11 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
             # Adjust position size based on regime
             position_size_pct = params.get('position_size_pct', 0.1)
             signals.loc[date, 'position_size_pct'] = position_size_pct
+            # Scale the existing position_size from SignalEngine
+            if 'position_size' in signals.columns:
+                signals.loc[date, 'position_size'] = (
+                    signals.loc[date, 'position_size'] * position_size_pct
+                )
             
             # Add stop loss and take profit levels if specified
             stop_loss_pct = params.get('stop_loss_pct')

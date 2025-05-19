@@ -68,6 +68,14 @@ def find_optimal_threshold(model, X_val, y_val):
     # Get probability predictions
     y_prob = model.predict(X_val)
     
+    # Print prediction statistics for debugging
+    print(f"Prediction stats (validation set): min={y_prob.min():.4f}, max={y_prob.max():.4f}, mean={y_prob.mean():.4f}")
+    print(f"Prediction histogram (validation set):")
+    bins = np.linspace(0, 1, 11)
+    hist, _ = np.histogram(y_prob, bins=bins)
+    for i in range(len(bins)-1):
+        print(f"  {bins[i]:.1f}-{bins[i+1]:.1f}: {hist[i]}")
+    
     # Try different thresholds
     thresholds = np.arange(0.3, 0.7, 0.01)
     best_f1 = 0
@@ -98,6 +106,7 @@ def find_optimal_threshold(model, X_val, y_val):
                 }
         except Exception as e:
             # Skip thresholds that cause errors (e.g., all predictions in one class)
+            print(f"Error at threshold {threshold}: {str(e)}")
             continue
     
     print(f"Optimal threshold: {best_threshold:.3f}")
@@ -142,6 +151,18 @@ def optimize_and_evaluate(df, model_type='xgboost', use_feature_pruning=True, n_
     print(f"Validation data shape: {X_val.shape}")
     print(f"Testing data shape: {X_test.shape}")
     
+    print(f"Class distribution in training set:")
+    print(f"  Positive (1): {np.sum(y_train == 1)} ({np.mean(y_train == 1) * 100:.2f}%)")
+    print(f"  Negative (0): {np.sum(y_train == 0)} ({np.mean(y_train == 0) * 100:.2f}%)")
+    
+    print(f"Class distribution in validation set:")
+    print(f"  Positive (1): {np.sum(y_val == 1)} ({np.mean(y_val == 1) * 100:.2f}%)")
+    print(f"  Negative (0): {np.sum(y_val == 0)} ({np.mean(y_val == 0) * 100:.2f}%)")
+    
+    print(f"Class distribution in test set:")
+    print(f"  Positive (1): {np.sum(y_test == 1)} ({np.mean(y_test == 1) * 100:.2f}%)")
+    print(f"  Negative (0): {np.sum(y_test == 0)} ({np.mean(y_test == 0) * 100:.2f}%)")
+    
     # Optimize hyperparameters
     print(f"Optimizing hyperparameters for {model_type} model...")
     best_params = optimize_hyperparameters(
@@ -159,6 +180,10 @@ def optimize_and_evaluate(df, model_type='xgboost', use_feature_pruning=True, n_
     
     # Train model on unscaled data (scaling is done in pipeline)
     model.train(X_train, y_train)
+    
+    # Check model predictions on training data for diagnostics
+    y_train_pred = model.predict(X_train)
+    print(f"Training prediction stats: min={y_train_pred.min():.4f}, max={y_train_pred.max():.4f}, mean={y_train_pred.mean():.4f}")
     
     # Find optimal threshold using validation set
     best_threshold, val_metrics = find_optimal_threshold(model, X_val, y_val)
@@ -188,15 +213,23 @@ def optimize_and_evaluate(df, model_type='xgboost', use_feature_pruning=True, n_
         # Predictions on all features
         y_pred = model.predict(X_test)
     
+    # Print prediction statistics
+    print(f"Test prediction stats: min={y_pred.min():.4f}, max={y_pred.max():.4f}, mean={y_pred.mean():.4f}")
+    print(f"Prediction histogram (test set):")
+    bins = np.linspace(0, 1, 11)
+    hist, _ = np.histogram(y_pred, bins=bins)
+    for i in range(len(bins)-1):
+        print(f"  {bins[i]:.1f}-{bins[i+1]:.1f}: {hist[i]}")
+    
     # Convert probabilities to binary predictions using optimal threshold
     y_pred_binary = (y_pred > best_threshold).astype(int)
     
     # Calculate metrics
     metrics = {
         'accuracy': accuracy_score(y_test, y_pred_binary),
-        'precision': precision_score(y_test, y_pred_binary),
-        'recall': recall_score(y_test, y_pred_binary),
-        'f1': f1_score(y_test, y_pred_binary),
+        'precision': precision_score(y_test, y_pred_binary, zero_division=0),
+        'recall': recall_score(y_test, y_pred_binary, zero_division=0),
+        'f1': f1_score(y_test, y_pred_binary, zero_division=0),
         'threshold': best_threshold
     }
     

@@ -9,6 +9,7 @@ import pickle
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
+from sklearn.preprocessing import StandardScaler
 import optuna
 from optuna.samplers import TPESampler
 
@@ -211,10 +212,17 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
                 focal_gamma = trial.suggest_float('focal_gamma', 0.5, 5.0)
                 focal_alpha = trial.suggest_float('focal_alpha', 0.1, 0.9)
                 class_weight = None
+                # Add focal loss parameters to the params
+                params['use_focal_loss'] = True
+                params['focal_gamma'] = focal_gamma
+                params['focal_alpha'] = focal_alpha
             else:
                 focal_gamma = None
                 focal_alpha = None
                 class_weight = trial.suggest_categorical('class_weight', ['balanced', None])
+                # Add class weight to params
+                params['use_focal_loss'] = False
+                params['class_weight'] = class_weight
             
             # Create custom evaluation function for cross-validation
             def custom_cv_score(estimator, X, y, cv):
@@ -224,56 +232,21 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
                     X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
                     y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
                     
-                    # Create and train model
-                    model_copy = xgb.XGBClassifier(
-                        objective='binary:logistic',
-                        random_state=random_state,
-                        n_jobs=-1,
-                        **params
-                    )
+                    # Import from src
+                    from src.models.xgboost_model import XGBoostModel
                     
-                    # Special handling for class imbalance
-                    if use_focal_loss:
-                        # Import from src
-                        from src.models.xgboost_model import XGBoostModel
-                        
-                        # Create a dedicated XGBoostModel
-                        custom_model = XGBoostModel(
-                            use_focal_loss=True,
-                            focal_gamma=focal_gamma,
-                            focal_alpha=focal_alpha,
-                            **params
-                        )
-                        custom_model.train(X_train, y_train)
-                        
-                        # Get predictions
-                        y_pred = custom_model.predict(X_test)
-                        y_pred_binary = (y_pred > 0.5).astype(int)
-                        
-                        # Calculate accuracy
-                        score = (y_pred_binary == y_test).mean()
-                    else:
-                        # Handle class weights using sample weights
-                        if class_weight == 'balanced':
-                            # Calculate class weights
-                            class_counts = np.bincount(y_train)
-                            total_samples = len(y_train)
-                            class_weights = total_samples / (len(class_counts) * class_counts)
-                            
-                            # Apply weights to samples
-                            sample_weights = np.ones(len(y_train))
-                            for i, weight in enumerate(class_weights):
-                                sample_weights[y_train == i] = weight
-                                
-                            # Train with sample weights
-                            model_copy.fit(X_train, y_train, sample_weight=sample_weights)
-                        else:
-                            # Standard training
-                            model_copy.fit(X_train, y_train)
-                        
-                        # Use predict method for standard models
-                        score = model_copy.score(X_test, y_test)
+                    # Create a dedicated XGBoostModel with current trial parameters
+                    custom_model = XGBoostModel(**params)
                     
+                    # Train the model on this fold
+                    custom_model.train(X_train, y_train)
+                    
+                    # Get predictions
+                    y_pred = custom_model.predict(X_test)
+                    y_pred_binary = (y_pred > 0.5).astype(int)
+                    
+                    # Calculate accuracy
+                    score = (y_pred_binary == y_test).mean()
                     scores.append(score)
                 
                 return np.mean(scores)

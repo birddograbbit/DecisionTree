@@ -3,6 +3,7 @@ Model engine for training, evaluating, and managing models.
 """
 
 import os
+import warnings
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import cross_val_score
@@ -252,8 +253,12 @@ class ModelEngine:
             
             sklearn_model = ModelWrapper(self.model)
         
-        # Perform cross-validation
-        return cross_val_score(sklearn_model, X, y, cv=cv, scoring='accuracy')
+        # Perform cross-validation, suppressing runtime warnings from sklearn
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            scores = cross_val_score(sklearn_model, X, y, cv=cv, scoring='accuracy')
+
+        return scores
     
     def _perform_hpo(self, X, y, param_grid, cv=3, scoring='accuracy'):
         """

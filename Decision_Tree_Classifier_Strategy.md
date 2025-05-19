@@ -309,6 +309,25 @@ python strategy_runner.py --data data/raw --model xgboost
 python strategy_runner.py --data data/raw --model stacking
 ```
 
+#### Position Sizing Options
+
+`TrendFollowingStrategy` supports two position sizing modes via the
+`position_sizing` configuration key:
+
+- **fixed** – every trade uses the same size.
+- **confidence** – position size scales with prediction confidence (default).
+
+Example configuration snippet:
+
+```python
+{
+    'name': 'XGBoost',
+    'model_type': 'xgboost',
+    'model_params': {...},
+    'position_sizing': 'fixed'
+}
+```
+
 #### Creating Custom Strategies
 
 To create a custom strategy:

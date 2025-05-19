@@ -110,9 +110,11 @@ class BacktestEngine:
                 
                 # Process signal
                 if signal == 1 and symbol not in self.positions:  # Buy
-                    # Calculate position size (equal weight for simplicity)
+                    # Calculate position size
+                    # Use signal's suggested position size fraction if provided
+                    size_fraction = signal_row.get('position_size', 1.0)
                     available_capital = self.capital * 0.95  # Keep some cash
-                    position_size = available_capital / price
+                    position_size = (available_capital * size_fraction) / price
                     cost = position_size * price * (1 + self.slippage) * (1 + self.commission)
                     
                     if cost <= self.capital:

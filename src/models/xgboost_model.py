@@ -17,6 +17,101 @@ except ImportError:
 from .base_model import BaseModel
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.base import BaseEstimator, ClassifierMixin
+
+class ModelAdapter(BaseEstimator, ClassifierMixin):
+    """
+    Adapter class to make a XGBoost Booster object compatible with scikit-learn.
+    
+    This class wraps a XGBoost Booster and provides the scikit-learn estimator interface,
+    including methods like fit, predict, and predict_proba.
+    """
+    
+    def __init__(self, booster=None, use_sigmoid=True):
+        """
+        Initialize the adapter.
+        
+        Parameters:
+        -----------
+        booster : xgboost.Booster or None
+            Pretrained XGBoost booster (default: None)
+        use_sigmoid : bool
+            Whether to apply sigmoid to get probabilities (default: True)
+        """
+        self.booster = booster
+        self.use_sigmoid = use_sigmoid
+        print("Using ModelAdapter for scikit-learn compatibility")
+        
+    def fit(self, X, y=None, **kwargs):
+        """
+        Dummy fit method for compatibility.
+        
+        Since the booster is already trained, this method does nothing.
+        
+        Parameters:
+        -----------
+        X : Any
+            Not used
+        y : Any
+            Not used
+        kwargs : dict
+            Additional arguments
+            
+        Returns:
+        --------
+        self
+            For method chaining
+        """
+        return self
+    
+    def predict_proba(self, X):
+        """
+        Generate probability predictions.
+        
+        Parameters:
+        -----------
+        X : pd.DataFrame or numpy.ndarray
+            Feature matrix
+            
+        Returns:
+        --------
+        numpy.ndarray
+            Array of shape (n_samples, 2) with probabilities for both classes
+        """
+        # Convert to DMatrix
+        dX = xgb.DMatrix(X)
+        
+        # Get raw predictions
+        raw_preds = self.booster.predict(dX)
+        
+        # Apply sigmoid to get probabilities
+        if self.use_sigmoid:
+            probs = 1.0 / (1.0 + np.exp(-raw_preds))
+        else:
+            probs = raw_preds  # Assume these are already probabilities
+            
+        # Return probabilities for both classes
+        return np.vstack((1 - probs, probs)).T
+    
+    def predict(self, X):
+        """
+        Generate class predictions.
+        
+        Parameters:
+        -----------
+        X : pd.DataFrame or numpy.ndarray
+            Feature matrix
+            
+        Returns:
+        --------
+        numpy.ndarray
+            Class predictions (0 or 1)
+        """
+        # Get probabilities for positive class
+        probs = self.predict_proba(X)[:, 1]
+        
+        # Convert to class predictions
+        return (probs > 0.5).astype(int)
 
 class FocalLoss:
     """
@@ -210,17 +305,20 @@ class XGBoostModel(BaseModel):
             params.pop('objective', None)     # Remove default objective
             
             # Train with custom objective
-            self._base = xgb.train(
+            booster = xgb.train(
                 params=params,
                 dtrain=dtrain,
                 num_boost_round=self.params['n_estimators'],
                 obj=focal_loss_obj
             )
             
-            # Create a pipeline with StandardScaler
-            self._clf = make_pipeline(StandardScaler(), self._base)
+            # Create a ModelAdapter to make the booster scikit-learn compatible
+            adapter = ModelAdapter(booster=booster, use_sigmoid=True)
             
-            # No need to fit the pipeline again as we've already trained the model
+            # Store the booster in base and the adapter in clf
+            self._base = booster
+            self._clf = make_pipeline(StandardScaler(), adapter)
+            
             return self
             
         elif self.class_weight == 'balanced':
@@ -271,9 +369,8 @@ class XGBoostModel(BaseModel):
             Predicted probabilities for positive class (class 1)
         """
         if self.use_focal_loss:
-            # For custom objective function
-            dX = xgb.DMatrix(X)
-            return self._base.predict(dX)
+            # Get probabilities using the pipeline with ModelAdapter
+            return self._clf.predict_proba(X)[:, 1]
         else:
             # For standard objective
             return self._clf.predict_proba(X)[:, 1]  # Probability of positive class

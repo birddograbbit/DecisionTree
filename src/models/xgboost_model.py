@@ -99,7 +99,9 @@ class XGBoostModel(BaseModel):
                  subsample=0.8, colsample_bytree=0.8, gamma=0, 
                  objective='binary:logistic', random_state=42, n_jobs=-1,
                  class_weight=None, use_focal_loss=False, 
-                 focal_gamma=2.0, focal_alpha=0.25):
+                 focal_gamma=2.0, focal_alpha=0.25,
+                 min_child_weight=1, reg_alpha=0, reg_lambda=1, 
+                 scale_pos_weight=1, **kwargs):
         """
         Initialize the XGBoost model.
         
@@ -132,6 +134,16 @@ class XGBoostModel(BaseModel):
             Focusing parameter for focal loss
         focal_alpha : float, default=0.25
             Class balancing parameter for focal loss
+        min_child_weight : float, default=1
+            Minimum sum of instance weight needed in a child
+        reg_alpha : float, default=0
+            L1 regularization term on weights
+        reg_lambda : float, default=1
+            L2 regularization term on weights
+        scale_pos_weight : float, default=1
+            Controls the balance of positive and negative weights
+        kwargs : dict
+            Additional parameters to pass to XGBClassifier
         """
         if not XGBOOST_AVAILABLE:
             raise ImportError("XGBoost is not installed. Cannot create XGBoostModel.")
@@ -145,8 +157,16 @@ class XGBoostModel(BaseModel):
             'gamma': gamma,
             'objective': objective,
             'random_state': random_state,
-            'n_jobs': n_jobs
+            'n_jobs': n_jobs,
+            'min_child_weight': min_child_weight,
+            'reg_alpha': reg_alpha,
+            'reg_lambda': reg_lambda,
+            'scale_pos_weight': scale_pos_weight
         }
+        
+        # Add any additional parameters
+        for key, value in kwargs.items():
+            self.params[key] = value
         
         # Store additional parameters for class imbalance handling
         self.class_weight = class_weight

@@ -114,28 +114,24 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
             'name': 'Decision Tree',
             'model_type': 'decision_tree',
             'model_params': {'max_depth': 5, 'min_samples_split': 5, 'calibrate': False},
-            'position_sizing': 'fixed',
             'symbol': symbol
         },
         {
             'name': 'Decision Tree (Calibrated)',
             'model_type': 'decision_tree',
             'model_params': {'max_depth': 5, 'min_samples_split': 5, 'calibrate': True},
-            'position_sizing': 'fixed',
             'symbol': symbol
         },
         {
             'name': 'Random Forest',
             'model_type': 'random_forest',
             'model_params': {'n_estimators': 100, 'max_depth': 5, 'calibrate': False},
-            'position_sizing': 'fixed',
             'symbol': symbol
         },
         {
             'name': 'Random Forest (Calibrated)',
             'model_type': 'random_forest',
             'model_params': {'n_estimators': 100, 'max_depth': 5, 'calibrate': True},
-            'position_sizing': 'fixed',
             'symbol': symbol
         }
     ]
@@ -146,7 +142,6 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
             'name': 'XGBoost',
             'model_type': 'xgboost',
             'model_params': {'n_estimators': 100, 'max_depth': 5, 'learning_rate': 0.1},
-            'position_sizing': 'fixed',
             'symbol': symbol
         })
         
@@ -154,7 +149,6 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
             'name': 'XGBoost (Confidence)',
             'model_type': 'xgboost',
             'model_params': {'n_estimators': 100, 'max_depth': 5, 'learning_rate': 0.1},
-            'position_sizing': 'confidence',
             'symbol': symbol
         })
     
@@ -169,16 +163,15 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
     if 'xgboost' in ModelFactory.get_available_models():
         base_models.append({'model_type': 'xgboost', 'model_params': {'n_estimators': 100, 'max_depth': 5, 'learning_rate': 0.1}})
     
-    strategy_configs.append({
-        'name': 'Stacking Ensemble',
-        'model_type': 'stacking',
-        'model_params': {
-            'base_models': base_models,
-            'meta_model': {'model_type': 'random_forest', 'model_params': {'n_estimators': 100, 'max_depth': 3}},
-            'cv': 5,
-            'use_features': False
+        strategy_configs.append({
+            'name': 'Stacking Ensemble',
+            'model_type': 'stacking',
+            'model_params': {
+                'base_models': base_models,
+                'meta_model': {'model_type': 'random_forest', 'model_params': {'n_estimators': 100, 'max_depth': 3}},
+                'cv': 5,
+                'use_features': False
         },
-        'position_sizing': 'fixed',
         'symbol': symbol
     })
     
@@ -484,7 +477,6 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         'name': model_type.title(),
         'model_type': model_type,
         'model_params': model_params,
-        'position_sizing': 'fixed',
         'symbol': symbol
     }
     

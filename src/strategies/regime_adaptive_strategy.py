@@ -34,7 +34,6 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
             Strategy configuration with keys:
             - model_type (str): Type of model to use
             - model_params (dict): Model parameters
-            - position_sizing (str): Position sizing method
             - regime_detection (dict): Regime detection configuration
         """
         # Call the parent's initialize method

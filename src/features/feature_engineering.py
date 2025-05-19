@@ -19,7 +19,7 @@ class ModelAdapter(BaseEstimator, ClassifierMixin):
     expected by scikit-learn functions like permutation_importance.
     """
     
-    def __init__(self, model):
+    def __init__(self, model, threshold=0.5):
         """
         Initialize the adapter with a model.
         
@@ -27,8 +27,11 @@ class ModelAdapter(BaseEstimator, ClassifierMixin):
         -----------
         model : object
             Model with predict method
+        threshold : float
+            Probability threshold for binary classification (default: 0.5)
         """
         self.model = model
+        self.threshold = threshold
     
     def fit(self, X, y):
         """
@@ -64,8 +67,8 @@ class ModelAdapter(BaseEstimator, ClassifierMixin):
         # Get probability predictions
         y_prob = self.model.predict(X)
         
-        # Convert to binary predictions
-        return (y_prob > 0.5).astype(int)
+        # Convert to binary predictions using the configured threshold
+        return (y_prob > self.threshold).astype(int)
     
     def predict_proba(self, X):
         """
@@ -247,7 +250,7 @@ def scale_features(X_train, X_test):
     
     return X_train_scaled, X_test_scaled, scaler
 
-def audit_features(model, X_train, y_train, X_test, y_test, n_repeats=10, n_top_features=10, random_state=42):
+def audit_features(model, X_train, y_train, X_test, y_test, n_repeats=10, n_top_features=10, random_state=42, threshold=0.5):
     """
     Perform feature importance audit using permutation importance.
     
@@ -269,6 +272,8 @@ def audit_features(model, X_train, y_train, X_test, y_test, n_repeats=10, n_top_
         Number of top features to return (default: 10)
     random_state : int
         Random seed for reproducibility (default: 42)
+    threshold : float
+        Probability threshold for binary classification (default: 0.5)
         
     Returns:
     --------
@@ -281,7 +286,7 @@ def audit_features(model, X_train, y_train, X_test, y_test, n_repeats=10, n_top_
     # If not, wrap it with our adapter
     if not hasattr(model, 'fit'):
         print("Using ModelAdapter for scikit-learn compatibility")
-        model_for_importance = ModelAdapter(model)
+        model_for_importance = ModelAdapter(model, threshold=threshold)
     else:
         model_for_importance = model
     
@@ -307,13 +312,15 @@ def audit_features(model, X_train, y_train, X_test, y_test, n_repeats=10, n_top_
         train_result = manual_permutation_importance(
             model, X_train, y_train, 
             n_repeats=n_repeats, 
-            random_state=random_state
+            random_state=random_state,
+            threshold=threshold
         )
         
         test_result = manual_permutation_importance(
             model, X_test, y_test, 
             n_repeats=n_repeats, 
-            random_state=random_state
+            random_state=random_state,
+            threshold=threshold
         )
     
     # Create DataFrames with importance results
@@ -340,7 +347,7 @@ class PermutationImportanceResult:
         self.importances_mean = importances_mean
         self.importances_std = importances_std
 
-def manual_permutation_importance(model, X, y, n_repeats=10, random_state=42):
+def manual_permutation_importance(model, X, y, n_repeats=10, random_state=42, threshold=0.5):
     """
     Manual implementation of permutation importance.
     
@@ -358,6 +365,8 @@ def manual_permutation_importance(model, X, y, n_repeats=10, random_state=42):
         Number of times to permute each feature (default: 10)
     random_state : int
         Random seed for reproducibility (default: 42)
+    threshold : float
+        Probability threshold for binary classification (default: 0.5)
         
     Returns:
     --------
@@ -369,7 +378,7 @@ def manual_permutation_importance(model, X, y, n_repeats=10, random_state=42):
     
     # Get baseline score
     y_pred = model.predict(X)
-    baseline_score = (y_pred > 0.5).astype(int) == y
+    baseline_score = (y_pred > threshold).astype(int) == y
     baseline_score = baseline_score.mean()
     
     # Initialize arrays to store feature importance
@@ -389,7 +398,7 @@ def manual_permutation_importance(model, X, y, n_repeats=10, random_state=42):
             
             # Calculate score with permuted feature
             y_pred_permuted = model.predict(X_permuted)
-            permuted_score = (y_pred_permuted > 0.5).astype(int) == y
+            permuted_score = (y_pred_permuted > threshold).astype(int) == y
             permuted_score = permuted_score.mean()
             
             # Calculate importance (decrease in score)

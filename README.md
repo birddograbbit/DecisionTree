@@ -16,5 +16,16 @@ This repository contains an implementation of a decision tree classifier for tra
 - Strategy Sharpe ratio > 1.0
 - Maximum drawdown < 25%
 
-See the [Decision Tree Classifier Strategy](Decision_Tree_Classifier_Strategy.md) for full documentation. The [v0.2 roadmap](v0.2_roadmap.md) describes planned improvements for the next release.
+## Testing
 
+Run the hyperparameter tuning example with:
+```bash
+python examples/hyperparameter_tuning_example.py --data data/raw/historical_data_STOCK_SPY_1_day2010-2025.csv --model xgboost --trials 20
+```
+
+To specifically test focal loss functionality:
+```bash
+python tests/test_focal_loss.py
+```
+
+See the [Decision Tree Classifier Strategy](Decision_Tree_Classifier_Strategy.md) for full documentation. The [v0.2 roadmap](v0.2_roadmap.md) describes planned improvements for the next release.

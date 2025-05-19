@@ -139,18 +139,19 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
     # Add XGBoost configuration if available
     if 'xgboost' in ModelFactory.get_available_models():
         strategy_configs.append({
-            'name': 'XGBoost',
+            'name': 'XGBoost (Fixed Position)',
             'model_type': 'xgboost',
             'model_params': {'n_estimators': 100, 'max_depth': 5, 'learning_rate': 0.1},
             'symbol': symbol,
-            'position_sizing': 'fixed'
+            'position_sizing': 'fixed'  # Fixed position size of 1.0 for all trades
         })
         
         strategy_configs.append({
-            'name': 'XGBoost (Confidence)',
+            'name': 'XGBoost (Confidence-Scaled)',
             'model_type': 'xgboost',
             'model_params': {'n_estimators': 100, 'max_depth': 5, 'learning_rate': 0.1},
             'symbol': symbol
+            # Uses default 'confidence' position sizing that scales with prediction strength
         })
     
     # Add Stacking model configuration
@@ -702,4 +703,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

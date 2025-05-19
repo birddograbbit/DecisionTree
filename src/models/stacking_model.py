@@ -98,12 +98,22 @@ class StackingModel(BaseModel):
             
             if meta_model_type == 'logistic_regression':
                 params = {'C': 1.0, 'random_state': 42}
-                params.update(self.meta_model_params)
-                # Meta learner pipeline leveraging saga solver and all cores
-                self.meta_model_sklearn = make_pipeline(
-                    StandardScaler(),
-                    LogisticRegression(max_iter=1000, solver='saga', n_jobs=-1, **params)
-                )
+                # Fix: Remove 'max_iter' from params if it's already specified explicitly
+                if 'max_iter' in self.meta_model_params:
+                    max_iter = self.meta_model_params.pop('max_iter')
+                    params.update(self.meta_model_params)
+                    # Use the max_iter from meta_model_params
+                    self.meta_model_sklearn = make_pipeline(
+                        StandardScaler(),
+                        LogisticRegression(max_iter=max_iter, solver='saga', n_jobs=-1, **params)
+                    )
+                else:
+                    params.update(self.meta_model_params)
+                    # Meta learner pipeline leveraging saga solver and all cores
+                    self.meta_model_sklearn = make_pipeline(
+                        StandardScaler(),
+                        LogisticRegression(max_iter=1000, solver='saga', n_jobs=-1, **params)
+                    )
             elif meta_model_type == 'random_forest':
                 from sklearn.ensemble import RandomForestClassifier
                 params = {'n_estimators': 100, 'max_depth': 3, 'random_state': 42}
@@ -340,4 +350,3 @@ class StackingModel(BaseModel):
             meta_model_str = "None"
             
         return f"StackingModel(base_models={len(self.base_models)}, meta_model={meta_model_str}, cv={self.cv})"
-

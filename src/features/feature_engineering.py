@@ -19,7 +19,7 @@ class ModelAdapter(BaseEstimator, ClassifierMixin):
     expected by scikit-learn functions like permutation_importance.
     """
     
-    def __init__(self, model):
+    def __init__(self, model, threshold=0.5):
         """
         Initialize the adapter with a model.
         
@@ -27,8 +27,11 @@ class ModelAdapter(BaseEstimator, ClassifierMixin):
         -----------
         model : object
             Model with predict method
+        threshold : float
+            Classification threshold (default: 0.5)
         """
         self.model = model
+        self.threshold = threshold
     
     def fit(self, X, y):
         """
@@ -64,8 +67,8 @@ class ModelAdapter(BaseEstimator, ClassifierMixin):
         # Get probability predictions
         y_prob = self.model.predict(X)
         
-        # Convert to binary predictions
-        return (y_prob > 0.5).astype(int)
+        # Convert to binary predictions using threshold
+        return (y_prob > self.threshold).astype(int)
     
     def predict_proba(self, X):
         """
@@ -84,8 +87,52 @@ class ModelAdapter(BaseEstimator, ClassifierMixin):
         # Get probability predictions for positive class
         y_prob = self.model.predict(X)
         
+        # Clip probabilities to avoid extreme values
+        y_prob = np.clip(y_prob, 0.001, 0.999)
+        
         # Format as 2D array with probabilities for both classes
         return np.vstack((1 - y_prob, y_prob)).T
+
+def find_optimal_threshold(model, X, y, n_thresholds=100):
+    """
+    Find the optimal threshold to convert probabilities to binary predictions.
+    
+    Parameters:
+    -----------
+    model : object
+        Trained model with predict method
+    X : pd.DataFrame
+        Feature matrix
+    y : pd.Series
+        Target values
+    n_thresholds : int
+        Number of thresholds to evaluate (default: 100)
+        
+    Returns:
+    --------
+    float
+        Optimal threshold
+    """
+    from sklearn.metrics import f1_score
+    
+    # Get probability predictions
+    y_pred = model.predict(X)
+    
+    # Generate thresholds
+    thresholds = np.linspace(0.1, 0.9, n_thresholds)
+    
+    # Evaluate each threshold
+    f1_scores = []
+    for threshold in thresholds:
+        y_pred_binary = (y_pred > threshold).astype(int)
+        f1 = f1_score(y, y_pred_binary, zero_division=0)
+        f1_scores.append(f1)
+    
+    # Find threshold with highest F1 score
+    best_idx = np.argmax(f1_scores)
+    best_threshold = thresholds[best_idx]
+    
+    return best_threshold
 
 def add_technical_indicators(df, lookback_period=10):
     """
@@ -281,7 +328,13 @@ def audit_features(model, X_train, y_train, X_test, y_test, n_repeats=10, n_top_
     # If not, wrap it with our adapter
     if not hasattr(model, 'fit'):
         print("Using ModelAdapter for scikit-learn compatibility")
-        model_for_importance = ModelAdapter(model)
+        
+        # Find optimal threshold for training data
+        train_threshold = find_optimal_threshold(model, X_train, y_train)
+        print(f"Optimal threshold for training data: {train_threshold:.4f}")
+        
+        # Use the optimal threshold for the adapter
+        model_for_importance = ModelAdapter(model, threshold=train_threshold)
     else:
         model_for_importance = model
     
@@ -306,12 +359,14 @@ def audit_features(model, X_train, y_train, X_test, y_test, n_repeats=10, n_top_
         # Fallback to manual feature importance calculation
         train_result = manual_permutation_importance(
             model, X_train, y_train, 
+            threshold=train_threshold if 'train_threshold' in locals() else 0.5,
             n_repeats=n_repeats, 
             random_state=random_state
         )
         
         test_result = manual_permutation_importance(
             model, X_test, y_test, 
+            threshold=train_threshold if 'train_threshold' in locals() else 0.5,
             n_repeats=n_repeats, 
             random_state=random_state
         )
@@ -340,7 +395,7 @@ class PermutationImportanceResult:
         self.importances_mean = importances_mean
         self.importances_std = importances_std
 
-def manual_permutation_importance(model, X, y, n_repeats=10, random_state=42):
+def manual_permutation_importance(model, X, y, threshold=0.5, n_repeats=10, random_state=42):
     """
     Manual implementation of permutation importance.
     
@@ -354,6 +409,8 @@ def manual_permutation_importance(model, X, y, n_repeats=10, random_state=42):
         Feature matrix
     y : pd.Series
         Target values
+    threshold : float
+        Classification threshold (default: 0.5)
     n_repeats : int
         Number of times to permute each feature (default: 10)
     random_state : int
@@ -369,7 +426,7 @@ def manual_permutation_importance(model, X, y, n_repeats=10, random_state=42):
     
     # Get baseline score
     y_pred = model.predict(X)
-    baseline_score = (y_pred > 0.5).astype(int) == y
+    baseline_score = (y_pred > threshold).astype(int) == y
     baseline_score = baseline_score.mean()
     
     # Initialize arrays to store feature importance
@@ -389,7 +446,7 @@ def manual_permutation_importance(model, X, y, n_repeats=10, random_state=42):
             
             # Calculate score with permuted feature
             y_pred_permuted = model.predict(X_permuted)
-            permuted_score = (y_pred_permuted > 0.5).astype(int) == y
+            permuted_score = (y_pred_permuted > threshold).astype(int) == y
             permuted_score = permuted_score.mean()
             
             # Calculate importance (decrease in score)

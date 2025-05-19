@@ -1,9 +1,3 @@
-# src/features/feature_engineering.py
-
-"""
-Module for feature engineering.
-"""
-
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler

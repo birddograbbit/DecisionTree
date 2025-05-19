@@ -9,7 +9,7 @@ import sys
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from sklearn.model_selection import train_test_split
 
 # Add src directory to path
@@ -45,6 +45,68 @@ def load_data(data_path):
     
     return df
 
+def find_optimal_threshold(model, X_val, y_val):
+    """
+    Find the optimal threshold for converting probabilities to class labels.
+    
+    Parameters:
+    -----------
+    model : object
+        Trained model with predict method
+    X_val : pd.DataFrame
+        Validation feature matrix
+    y_val : pd.Series
+        Validation target values
+        
+    Returns:
+    --------
+    float
+        Optimal threshold
+    dict
+        Metrics at optimal threshold
+    """
+    # Get probability predictions
+    y_prob = model.predict(X_val)
+    
+    # Try different thresholds
+    thresholds = np.arange(0.3, 0.7, 0.01)
+    best_f1 = 0
+    best_threshold = 0.5
+    best_metrics = {}
+    
+    for threshold in thresholds:
+        # Convert probabilities to binary predictions
+        y_pred = (y_prob > threshold).astype(int)
+        
+        # Calculate metrics
+        try:
+            precision = precision_score(y_val, y_pred)
+            recall = recall_score(y_val, y_pred)
+            f1 = f1_score(y_val, y_pred)
+            accuracy = accuracy_score(y_val, y_pred)
+            
+            # Check if this threshold gives better F1 score
+            if f1 > best_f1:
+                best_f1 = f1
+                best_threshold = threshold
+                best_metrics = {
+                    'threshold': threshold,
+                    'accuracy': accuracy,
+                    'precision': precision,
+                    'recall': recall,
+                    'f1': f1
+                }
+        except Exception as e:
+            # Skip thresholds that cause errors (e.g., all predictions in one class)
+            continue
+    
+    print(f"Optimal threshold: {best_threshold:.3f}")
+    print(f"Metrics at optimal threshold:")
+    for metric, value in best_metrics.items():
+        print(f"  {metric}: {value:.4f}")
+    
+    return best_threshold, best_metrics
+
 def optimize_and_evaluate(df, model_type='xgboost', use_feature_pruning=True, n_trials=50):
     """
     Optimize hyperparameters and evaluate model performance.
@@ -65,13 +127,19 @@ def optimize_and_evaluate(df, model_type='xgboost', use_feature_pruning=True, n_
     tuple
         (best_params, metrics, feature_importances, top_features)
     """
-    # Split data into train and test sets
+    # Split data into train, validation, and test sets
     train_end_date = '2020-12-31'
     X_train, X_test, y_train, y_test, dates_train, dates_test, scaler = prepare_train_test_data(
         df, train_end_date=train_end_date
     )
     
+    # Further split test set into validation and test
+    X_val, X_test, y_val, y_test, dates_val, dates_test = train_test_split(
+        X_test, y_test, dates_test, test_size=0.5, random_state=config.RANDOM_STATE
+    )
+    
     print(f"Training data shape: {X_train.shape}")
+    print(f"Validation data shape: {X_val.shape}")
     print(f"Testing data shape: {X_test.shape}")
     
     # Optimize hyperparameters
@@ -92,12 +160,16 @@ def optimize_and_evaluate(df, model_type='xgboost', use_feature_pruning=True, n_
     # Train model on unscaled data (scaling is done in pipeline)
     model.train(X_train, y_train)
     
-    # Feature importance and pruning
+    # Find optimal threshold using validation set
+    best_threshold, val_metrics = find_optimal_threshold(model, X_val, y_val)
+    
+    # Feature importance and pruning with optimal threshold
     train_importances, test_importances, top_features = audit_features(
         model, X_train, y_train, X_test, y_test,
         n_repeats=config.FEATURE_AUDIT_N_REPEATS,
         n_top_features=config.TOP_N_FEATURES,
-        random_state=config.RANDOM_STATE
+        random_state=config.RANDOM_STATE,
+        threshold=best_threshold
     )
     
     print(f"Top {len(top_features)} features: {top_features}")
@@ -116,21 +188,40 @@ def optimize_and_evaluate(df, model_type='xgboost', use_feature_pruning=True, n_
         # Predictions on all features
         y_pred = model.predict(X_test)
     
-    # Convert probabilities to binary predictions
-    y_pred_binary = (y_pred > 0.5).astype(int)
+    # Convert probabilities to binary predictions using optimal threshold
+    y_pred_binary = (y_pred > best_threshold).astype(int)
     
     # Calculate metrics
     metrics = {
         'accuracy': accuracy_score(y_test, y_pred_binary),
         'precision': precision_score(y_test, y_pred_binary),
         'recall': recall_score(y_test, y_pred_binary),
-        'f1': f1_score(y_test, y_pred_binary)
+        'f1': f1_score(y_test, y_pred_binary),
+        'threshold': best_threshold
     }
     
+    # Compute and display confusion matrix
+    cm = confusion_matrix(y_test, y_pred_binary)
+    print("\nConfusion Matrix:")
+    print(cm)
+    print(f"\nTrue Positives: {cm[1][1]}")
+    print(f"False Positives: {cm[0][1]}")
+    print(f"True Negatives: {cm[0][0]}")
+    print(f"False Negatives: {cm[1][0]}")
+    
     # Print metrics
-    print(f"Model performance metrics:")
+    print(f"\nModel performance metrics:")
     for metric, value in metrics.items():
         print(f"  {metric}: {value:.4f}")
+    
+    # Class distribution
+    pos_count = np.sum(y_test == 1)
+    neg_count = np.sum(y_test == 0)
+    pos_pct = pos_count / len(y_test) * 100
+    neg_pct = neg_count / len(y_test) * 100
+    print(f"\nTest set class distribution:")
+    print(f"  Positive (1): {pos_count} ({pos_pct:.2f}%)")
+    print(f"  Negative (0): {neg_count} ({neg_pct:.2f}%)")
     
     # Save hyperparameters
     save_hyperparameters(best_params, model_type)

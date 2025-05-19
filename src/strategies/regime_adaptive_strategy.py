@@ -1,3 +1,5 @@
+# src/strategies/regime_adaptive_strategy.py
+
 """
 Regime-adaptive trading strategy.
 
@@ -15,6 +17,7 @@ from src.engines.model_engine import ModelEngine
 from src.engines.signal_engine import SignalEngine
 from src.features.feature_engineering import engineer_features
 from src.backtesting.engine import BacktestEngine
+from src.models.model_factory import ModelFactory
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -70,6 +73,15 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
         
         # Add default regime parameters for every possible regime to avoid key errors
         self._add_default_regime_params()
+        
+        # Flag to use regime-specific hyperparameters
+        self.use_regime_specific_params = config.get('use_regime_specific_params', False)
+        
+        # Store hyperparameter optimization settings
+        self.use_optimized = config.get('use_optimized', False)
+        
+        # Initialize regime-specific models
+        self.regime_models = {}
         
     def _add_default_regime_params(self):
         """
@@ -136,6 +148,78 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
             self.regime_detector.regime_history = result
             
             return result
+
+    def _initialize_regime_specific_models(self, train_data):
+        """
+        Initialize regime-specific models for each detected regime.
+        
+        Parameters:
+        -----------
+        train_data : pd.DataFrame
+            Training data
+        """
+        if not self.use_regime_specific_params or not self.regimes_detected:
+            return
+        
+        # Get regime labels
+        if not hasattr(self, 'regime_data') or self.regime_data is None:
+            logger.warning("No regime data available. Cannot initialize regime-specific models.")
+            return
+        
+        try:
+            # Get unique regime labels from training data
+            regime_labels = self.regime_data.loc[train_data.index, 'regime_label'].dropna().unique()
+            
+            # Skip if no regimes detected
+            if len(regime_labels) == 0:
+                logger.warning("No regimes detected in training data. Using default model.")
+                return
+            
+            # Use model_type and model_params from config
+            model_type = self.config.get('model_type')
+            model_params = self.config.get('model_params', {}).copy()
+            
+            # Set optimized flag
+            model_params['use_optimized'] = self.use_optimized
+            
+            # Generate features
+            X, y, dates = self.generate_features(train_data)
+            
+            # Track models for each regime
+            for regime_label in regime_labels:
+                # Get indices for this regime
+                regime_indices = self.regime_data.loc[train_data.index, 'regime_label'] == regime_label
+                
+                # Skip if too few samples
+                if regime_indices.sum() < 100:  # Minimum samples threshold
+                    logger.warning(f"Too few samples ({regime_indices.sum()}) for regime {regime_label}. "
+                                  f"Using default model.")
+                    continue
+                
+                # Extract data for this regime
+                X_regime = X.iloc[regime_indices.values]
+                y_regime = y.iloc[regime_indices.values]
+                
+                # Create model with regime parameter
+                model_params['regime'] = regime_label
+                
+                try:
+                    regime_model = ModelFactory.create_model(model_type, **model_params)
+                    self.regime_models[regime_label] = ModelEngine(model=regime_model)
+                    
+                    # Train model
+                    self.regime_models[regime_label].train(X_regime, y_regime)
+                    
+                    logger.info(f"Trained regime-specific model for {regime_label} "
+                               f"with {len(X_regime)} samples")
+                except Exception as e:
+                    logger.error(f"Error creating regime-specific model for {regime_label}: {e}")
+                    # Skip this regime - we'll use the base model
+            
+            logger.info(f"Initialized {len(self.regime_models)} regime-specific models")
+            
+        except Exception as e:
+            logger.error(f"Error initializing regime-specific models: {e}")
 
     def generate_features(self, data):
         """
@@ -353,16 +437,20 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
             Trading signals
         """
         try:
-            # Initialize signals as in the parent class
-            base_signals = super().generate_signals(features, predictions, dates)
+            # Initialize signals based on parent method, but without sending
+            # predictions (we'll use regime-specific models if available)
+            # Create a signals dataframe first
+            signals = pd.DataFrame(index=dates)
+            signals['date'] = dates
+            signals['symbol'] = self.config.get('symbol', 'SPY')
+            signals['signal'] = 0  # Initialize with no signal
+            signals['probability'] = 0.5  # Default probability
+            signals['position_size'] = 0.0  # Default position size
             
-            # If regimes haven't been detected or regime_data is missing, return base signals
+            # If regimes haven't been detected or regime_data is missing, use base signals
             if not self.regimes_detected or not hasattr(self, 'regime_data'):
                 logger.warning("No regimes detected. Using base signals.")
-                return base_signals
-            
-            # Create modified signals based on regimes
-            signals = base_signals.copy()
+                return super().generate_signals(features, predictions, dates)
             
             # Add regime information to signals
             try:
@@ -388,24 +476,51 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
                 signals['regime'] = 0
                 signals['regime_label'] = 'neutral'
             
-            # Adjust signal generation based on regime
+            # Use regime-specific models if available
+            if self.use_regime_specific_params and self.regime_models:
+                # Process each regime separately
+                for regime_label, regime_rows in signals.groupby('regime_label'):
+                    # Skip if no rows for this regime
+                    if len(regime_rows) == 0:
+                        continue
+                    
+                    # Get indices for this regime
+                    regime_indices = signals.index.isin(regime_rows.index)
+                    
+                    # Use regime-specific model if available
+                    if regime_label in self.regime_models:
+                        logger.info(f"Using regime-specific model for {regime_label}")
+                        # Get features for this regime
+                        regime_features = features.loc[regime_indices]
+                        
+                        # Get predictions from regime-specific model
+                        regime_predictions = self.regime_models[regime_label].predict(regime_features)
+                        
+                        # Update signals with regime-specific predictions
+                        signals.loc[regime_indices, 'probability'] = regime_predictions
+                    else:
+                        # Use base model predictions
+                        signals.loc[regime_indices, 'probability'] = predictions[regime_indices]
+            else:
+                # Use base model predictions for all regimes
+                signals['probability'] = predictions
+            
+            # Apply signal generation based on regime and probability
             for date in signals.index:
                 try:
                     regime_label = signals.loc[date, 'regime_label']
+                    probability = signals.loc[date, 'probability']
                     
                     # Skip if regime label is missing
                     if pd.isna(regime_label):
                         continue
                     
-                    original_signal = signals.loc[date, 'signal'] # Get signal from base_signals
-                    probability = signals.loc[date, 'probability']
-
+                    # Get regime-specific parameters
                     params = self._get_regime_parameters(regime_label)
                     buy_threshold = params.get('buy_threshold', self.buy_threshold)
                     sell_threshold = params.get('sell_threshold', self.sell_threshold)
                     
-                    # Adjust signal based on threshold
-                    new_signal = original_signal # Default to original signal
+                    # Determine signal
                     if probability > buy_threshold:
                         new_signal = 1  # Buy
                     elif probability < sell_threshold:
@@ -415,14 +530,20 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
                     
                     signals.loc[date, 'signal'] = new_signal
                     
+                    # Calculate position size based on probability distance from threshold
+                    if new_signal == 1:
+                        # Buy signal: scale by distance from buy threshold
+                        confidence = (probability - buy_threshold) / (1 - buy_threshold)
+                        signals.loc[date, 'position_size'] = max(0.0, min(1.0, confidence))
+                    elif new_signal == -1:
+                        # Sell signal: scale by distance from sell threshold
+                        confidence = (sell_threshold - probability) / sell_threshold
+                        signals.loc[date, 'position_size'] = max(0.0, min(1.0, confidence))
+                    
                     # Adjust position size based on regime
                     position_size_pct = params.get('position_size_pct', 0.1)
                     signals.loc[date, 'position_size_pct'] = position_size_pct
-                    # Scale the existing position_size from SignalEngine
-                    if 'position_size' in signals.columns:
-                        signals.loc[date, 'position_size'] = (
-                            signals.loc[date, 'position_size'] * position_size_pct
-                        )
+                    signals.loc[date, 'position_size'] *= position_size_pct
                     
                     # Add stop loss and take profit levels if specified
                     stop_loss_pct = params.get('stop_loss_pct')
@@ -436,14 +557,18 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
                         
                 except Exception as e:
                     logger.error(f"Error adjusting signal for date {date}: {e}")
-                    # Keep original signal if there's an error
+                    # Use default values if signal adjustment fails
+            
+            # Apply additional signal filtering and processing from SignalEngine
+            if hasattr(self, 'signal_engine') and self.signal_engine is not None:
+                signals = self.signal_engine.apply_filters(signals)
             
             return signals
             
         except Exception as e:
             logger.error(f"Error in generate_signals: {e}")
             # Return base signals if regime adjustment fails
-            return base_signals
+            return super().generate_signals(features, predictions, dates)
 
     def backtest(self, data, train_data=None, test_data=None):
         """
@@ -503,14 +628,46 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
                     self.regime_data['regime_label'] = 'neutral'
                     
                 self.regimes_detected = True # Ensure flag is set, even if detection had issues
+                
+            # Initialize regime-specific models if using regime-specific hyperparameters
+            if self.use_regime_specific_params and train_data is not None:
+                self._initialize_regime_specific_models(train_data)
             
-            # Run backtest with the parent class
-            results = super().backtest(data, train_data, test_data)
+            # Run backtest (modified to use regime-specific models)
+            # Split data if not provided
+            if train_data is None or test_data is None:
+                train_size = int(len(data) * 0.7)
+                train_data = data.iloc[:train_size]
+                test_data = data.iloc[train_size:]
+                
+            # Generate features and train model
+            train_features, train_target, train_dates = self.generate_features(train_data)
+            
+            # Train base model (still needed even with regime-specific models)
+            self.model_engine.train(train_features, train_target)
+            
+            # Generate features for test data
+            test_features, test_target, test_dates = self.generate_features(test_data)
+            
+            # Generate predictions (base model)
+            predictions = self.model_engine.predict(test_features)
+            
+            # Generate signals (will use regime-specific models if available)
+            signals = self.generate_signals(test_features, predictions, test_dates)
+            
+            # Run backtest
+            backtest_results = self.backtest_engine.run_backtest(
+                data=test_data,
+                signals=signals,
+                initial_capital=100000,
+                commission=0.001,
+                slippage=0.001
+            )
             
             # Add regime analysis to results
-            self._add_regime_analysis(results, test_data)
+            self._add_regime_analysis(backtest_results, test_data)
             
-            return results
+            return backtest_results
             
         except Exception as e:
             logger.error(f"Error in backtest: {e}")
@@ -659,6 +816,13 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
                         }
                 except Exception as e:
                     logger.error(f"Error calculating regime stats: {e}")
+            
+            # Add metrics on regime-specific models if available
+            if self.use_regime_specific_params and self.regime_models:
+                metrics['regime_models'] = {
+                    'count': len(self.regime_models),
+                    'regimes_with_models': list(self.regime_models.keys())
+                }
             
             return metrics
             

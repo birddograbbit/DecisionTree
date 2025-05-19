@@ -28,6 +28,8 @@ class TrendFollowingStrategy(BaseStrategy):
             Strategy configuration with keys:
             - model_type (str): Type of model to use
             - model_params (dict): Model parameters
+            - position_sizing (str, optional): Position sizing method for
+              ``SignalEngine`` ('fixed' or 'confidence')
         """
         # Store configuration
         self.config = config
@@ -38,8 +40,10 @@ class TrendFollowingStrategy(BaseStrategy):
         
         # Initialize engines
         self.model_engine = ModelEngine(self.model_type, self.model_params)
-        # Use global thresholds and probability-based position sizing
-        self.signal_engine = SignalEngine()
+
+        # Position sizing method for SignalEngine
+        self.position_sizing = config.get('position_sizing', 'confidence')
+        self.signal_engine = SignalEngine(position_sizing=self.position_sizing)
         
         # Store strategy state
         self.is_trained = False

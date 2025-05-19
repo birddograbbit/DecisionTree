@@ -1,4 +1,5 @@
 # src/features/feature_engineering.py
+
 """
 Module for feature engineering.
 """
@@ -6,6 +7,7 @@ Module for feature engineering.
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
+from sklearn.inspection import permutation_importance
 from src.features.indicators import *
 
 def add_technical_indicators(df, lookback_period=10):
@@ -65,10 +67,19 @@ def add_technical_indicators(df, lookback_period=10):
     result['price_momentum_5d'] = result['close'] / result['close'].shift(5) - 1
     result['price_momentum_10d'] = result['close'] / result['close'].shift(10) - 1
 
-    
     # Volume momentum (volume vs. previous periods)
     result['volume_momentum_1d'] = result['volume'] / result['volume'].shift(1) - 1
     result['volume_momentum_5d'] = result['volume'] / result['volume'].shift(5) - 1
+    
+    # New momentum-volatility hybrid features
+    # ADX (Average Directional Index)
+    result['adx'], result['plus_di'], result['minus_di'] = calculate_adx(result, window=lookback_period)
+    
+    # ADX Momentum
+    result['adx_momentum'] = calculate_adx_momentum(result, adx_window=lookback_period, roc_window=5)
+    
+    # ATR Z-Score
+    result['atr_zscore'] = calculate_atr_zscore(result, atr_window=lookback_period, zscore_window=60)
     
     # Drop NaN values introduced by indicators
     result = result.dropna()
@@ -100,11 +111,13 @@ def engineer_features(df, lookback_period=10):
     # Ensure we're not using any future information
     # by using only indicators that look backwards, not forwards
     
-    # Create feature list - REMOVE price_momentum_1d as it's causing the leakage
+    # Create expanded feature list including the new hybrid features
     features = [
         'sma_ratio', 'rsi', 'std', 'bb_position',
         'price_momentum_5d', 'volume_momentum_1d',
-        'macd', 'stoch_k', 'atr'
+        'macd', 'stoch_k', 'atr',
+        'adx', 'adx_momentum', 'atr_zscore',  # New momentum-volatility features
+        'plus_di', 'minus_di'  # Additional trend indicators
     ]
     
     # Extract features
@@ -157,7 +170,120 @@ def scale_features(X_train, X_test):
     
     return X_train_scaled, X_test_scaled, scaler
 
-def prepare_train_test_data(df, train_end_date=None):
+def audit_features(model, X_train, y_train, X_test, y_test, n_repeats=10, n_top_features=10, random_state=42):
+    """
+    Perform feature importance audit using permutation importance.
+    
+    Parameters:
+    -----------
+    model : object
+        Trained model with predict method
+    X_train : pd.DataFrame
+        Training feature matrix
+    y_train : pd.Series
+        Training target values
+    X_test : pd.DataFrame
+        Testing feature matrix
+    y_test : pd.Series
+        Testing target values
+    n_repeats : int
+        Number of times to permute each feature (default: 10)
+    n_top_features : int
+        Number of top features to return (default: 10)
+    random_state : int
+        Random seed for reproducibility (default: 42)
+        
+    Returns:
+    --------
+    tuple
+        (train_importances, test_importances, top_features)
+        where importances are DataFrames with mean and std of importance
+        and top_features is a list of feature names
+    """
+    # Calculate permutation importance on training data
+    train_result = permutation_importance(
+        model, X_train, y_train, 
+        n_repeats=n_repeats, 
+        random_state=random_state
+    )
+    
+    # Calculate permutation importance on test data
+    test_result = permutation_importance(
+        model, X_test, y_test, 
+        n_repeats=n_repeats, 
+        random_state=random_state
+    )
+    
+    # Create DataFrames with importance results
+    train_importances = pd.DataFrame({
+        'feature': X_train.columns,
+        'importance_mean': train_result.importances_mean,
+        'importance_std': train_result.importances_std
+    }).sort_values('importance_mean', ascending=False)
+    
+    test_importances = pd.DataFrame({
+        'feature': X_test.columns,
+        'importance_mean': test_result.importances_mean,
+        'importance_std': test_result.importances_std
+    }).sort_values('importance_mean', ascending=False)
+    
+    # Identify top features based on test importance
+    top_features = test_importances.iloc[:n_top_features]['feature'].tolist()
+    
+    return train_importances, test_importances, top_features
+
+def prune_features(X_train, X_test, top_features):
+    """
+    Prune features to keep only the most important ones.
+    
+    Parameters:
+    -----------
+    X_train : pd.DataFrame
+        Training feature matrix
+    X_test : pd.DataFrame
+        Testing feature matrix
+    top_features : list
+        List of feature names to keep
+        
+    Returns:
+    --------
+    tuple
+        (X_train_pruned, X_test_pruned)
+    """
+    X_train_pruned = X_train[top_features].copy()
+    X_test_pruned = X_test[top_features].copy()
+    
+    return X_train_pruned, X_test_pruned
+
+def check_collinearity(X, threshold=0.8):
+    """
+    Check for highly correlated features.
+    
+    Parameters:
+    -----------
+    X : pd.DataFrame
+        Feature matrix
+    threshold : float
+        Correlation threshold (default: 0.8)
+        
+    Returns:
+    --------
+    list
+        List of tuples (feature1, feature2, correlation) for correlated features
+    """
+    corr_matrix = X.corr().abs()
+    upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+    
+    # Find highly correlated feature pairs
+    correlated_pairs = []
+    for col in upper_tri.columns:
+        for idx, val in upper_tri[col].items():
+            if val > threshold:
+                correlated_pairs.append((idx, col, val))
+                
+    return correlated_pairs
+
+def prepare_train_test_data(df, train_end_date=None, prune_features_flag=False, top_n_features=10):
     """
     Prepare training and testing data for model development.
     
@@ -168,6 +294,10 @@ def prepare_train_test_data(df, train_end_date=None):
     train_end_date : str or None
         End date for training data (e.g., '2022-12-31')
         If None, all data is used for both training and testing
+    prune_features_flag : bool
+        Whether to prune features based on importance (default: False)
+    top_n_features : int
+        Number of top features to keep if pruning (default: 10)
         
     Returns:
     --------
@@ -198,6 +328,13 @@ def prepare_train_test_data(df, train_end_date=None):
         X_test = X
         y_test = y
         dates_test = dates
+    
+    # Check for highly correlated features
+    correlated_pairs = check_collinearity(X_train, threshold=0.8)
+    if correlated_pairs:
+        print(f"Found {len(correlated_pairs)} highly correlated feature pairs:")
+        for feat1, feat2, corr in correlated_pairs:
+            print(f"  {feat1} and {feat2}: {corr:.3f}")
     
     # Scale features
     X_train_scaled, X_test_scaled, scaler = scale_features(X_train, X_test)

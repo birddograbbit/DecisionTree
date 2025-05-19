@@ -8,7 +8,84 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.inspection import permutation_importance
+from sklearn.base import BaseEstimator, ClassifierMixin
 from src.features.indicators import *
+
+class ModelAdapter(BaseEstimator, ClassifierMixin):
+    """
+    Adapter class to make our custom models compatible with scikit-learn's API.
+    
+    This adapter wraps our BaseModel implementations to provide the interface 
+    expected by scikit-learn functions like permutation_importance.
+    """
+    
+    def __init__(self, model):
+        """
+        Initialize the adapter with a model.
+        
+        Parameters:
+        -----------
+        model : object
+            Model with predict method
+        """
+        self.model = model
+    
+    def fit(self, X, y):
+        """
+        Dummy fit method - the model is already trained.
+        
+        Parameters:
+        -----------
+        X : pd.DataFrame or np.ndarray
+            Feature matrix
+        y : pd.Series or np.ndarray
+            Target values
+            
+        Returns:
+        --------
+        self
+        """
+        return self
+    
+    def predict(self, X):
+        """
+        Predict binary class labels for X.
+        
+        Parameters:
+        -----------
+        X : pd.DataFrame or np.ndarray
+            Feature matrix
+            
+        Returns:
+        --------
+        np.ndarray
+            Predicted class labels (0 or 1)
+        """
+        # Get probability predictions
+        y_prob = self.model.predict(X)
+        
+        # Convert to binary predictions
+        return (y_prob > 0.5).astype(int)
+    
+    def predict_proba(self, X):
+        """
+        Predict class probabilities for X.
+        
+        Parameters:
+        -----------
+        X : pd.DataFrame or np.ndarray
+            Feature matrix
+            
+        Returns:
+        --------
+        np.ndarray
+            Predicted class probabilities
+        """
+        # Get probability predictions for positive class
+        y_prob = self.model.predict(X)
+        
+        # Format as 2D array with probabilities for both classes
+        return np.vstack((1 - y_prob, y_prob)).T
 
 def add_technical_indicators(df, lookback_period=10):
     """
@@ -200,19 +277,44 @@ def audit_features(model, X_train, y_train, X_test, y_test, n_repeats=10, n_top_
         where importances are DataFrames with mean and std of importance
         and top_features is a list of feature names
     """
-    # Calculate permutation importance on training data
-    train_result = permutation_importance(
-        model, X_train, y_train, 
-        n_repeats=n_repeats, 
-        random_state=random_state
-    )
+    # Check if the model has a fit method (scikit-learn compatible)
+    # If not, wrap it with our adapter
+    if not hasattr(model, 'fit'):
+        print("Using ModelAdapter for scikit-learn compatibility")
+        model_for_importance = ModelAdapter(model)
+    else:
+        model_for_importance = model
     
-    # Calculate permutation importance on test data
-    test_result = permutation_importance(
-        model, X_test, y_test, 
-        n_repeats=n_repeats, 
-        random_state=random_state
-    )
+    # Calculate permutation importance on training data
+    try:
+        train_result = permutation_importance(
+            model_for_importance, X_train, y_train, 
+            n_repeats=n_repeats, 
+            random_state=random_state
+        )
+        
+        # Calculate permutation importance on test data
+        test_result = permutation_importance(
+            model_for_importance, X_test, y_test, 
+            n_repeats=n_repeats, 
+            random_state=random_state
+        )
+    except Exception as e:
+        print(f"Error calculating permutation importance: {e}")
+        print("Falling back to manual feature importance calculation...")
+        
+        # Fallback to manual feature importance calculation
+        train_result = manual_permutation_importance(
+            model, X_train, y_train, 
+            n_repeats=n_repeats, 
+            random_state=random_state
+        )
+        
+        test_result = manual_permutation_importance(
+            model, X_test, y_test, 
+            n_repeats=n_repeats, 
+            random_state=random_state
+        )
     
     # Create DataFrames with importance results
     train_importances = pd.DataFrame({
@@ -231,6 +333,75 @@ def audit_features(model, X_train, y_train, X_test, y_test, n_repeats=10, n_top_
     top_features = test_importances.iloc[:n_top_features]['feature'].tolist()
     
     return train_importances, test_importances, top_features
+
+class PermutationImportanceResult:
+    """Simple class to hold permutation importance results."""
+    def __init__(self, importances_mean, importances_std):
+        self.importances_mean = importances_mean
+        self.importances_std = importances_std
+
+def manual_permutation_importance(model, X, y, n_repeats=10, random_state=42):
+    """
+    Manual implementation of permutation importance.
+    
+    Used as a fallback if scikit-learn's implementation fails.
+    
+    Parameters:
+    -----------
+    model : object
+        Trained model with predict method
+    X : pd.DataFrame
+        Feature matrix
+    y : pd.Series
+        Target values
+    n_repeats : int
+        Number of times to permute each feature (default: 10)
+    random_state : int
+        Random seed for reproducibility (default: 42)
+        
+    Returns:
+    --------
+    PermutationImportanceResult
+        Object with importances_mean and importances_std properties
+    """
+    # Set random seed
+    np.random.seed(random_state)
+    
+    # Get baseline score
+    y_pred = model.predict(X)
+    baseline_score = (y_pred > 0.5).astype(int) == y
+    baseline_score = baseline_score.mean()
+    
+    # Initialize arrays to store feature importance
+    n_features = X.shape[1]
+    importances = np.zeros((n_repeats, n_features))
+    
+    # For each feature
+    for i in range(n_features):
+        # For each repetition
+        for r in range(n_repeats):
+            # Make a copy of the data
+            X_permuted = X.copy()
+            
+            # Permute the feature
+            permutation = np.random.permutation(len(X))
+            X_permuted.iloc[:, i] = X_permuted.iloc[permutation, i].values
+            
+            # Calculate score with permuted feature
+            y_pred_permuted = model.predict(X_permuted)
+            permuted_score = (y_pred_permuted > 0.5).astype(int) == y
+            permuted_score = permuted_score.mean()
+            
+            # Calculate importance (decrease in score)
+            importances[r, i] = baseline_score - permuted_score
+    
+    # Calculate mean and std of importances
+    importances_mean = np.mean(importances, axis=0)
+    importances_std = np.std(importances, axis=0)
+    
+    # Return result
+    result = PermutationImportanceResult(importances_mean, importances_std)
+    return result
 
 def prune_features(X_train, X_test, top_features):
     """

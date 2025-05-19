@@ -555,6 +555,10 @@ The regime-adaptive strategy adjusts risk parameters based on the detected marke
 3. **Neutral**: Reduced position sizing, higher entry threshold
 4. **Weak Downtrend**: Minimal position sizing, very high entry threshold
 5. **Strong Downtrend**: Extremely conservative or avoid trading
+6. **Custom Thresholds**: Specify `buy_threshold` and `sell_threshold` in
+   `regime_params` to override the default 0.65/0.35 levels. Setting
+   `use_low_thresholds: true` applies 0.55 and 0.45 by default if specific
+   values are not provided.
 
 ## Performance Evaluation
 

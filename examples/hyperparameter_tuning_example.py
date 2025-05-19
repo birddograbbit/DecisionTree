@@ -85,23 +85,9 @@ def optimize_and_evaluate(df, model_type='xgboost', use_feature_pruning=True, n_
     print(f"Best hyperparameters: {best_params}")
     
     # Create model with best hyperparameters
-    # Handle focal loss parameters separately for XGBoost
-    if model_type == 'xgboost':
-        use_focal_loss = best_params.pop('use_focal_loss', False)
-        focal_gamma = best_params.pop('focal_gamma', 2.0) if use_focal_loss else None
-        focal_alpha = best_params.pop('focal_alpha', 0.25) if use_focal_loss else None
-        
-        # Create model
-        model = ModelFactory.create_model(
-            model_type, 
-            use_focal_loss=use_focal_loss, 
-            focal_gamma=focal_gamma,
-            focal_alpha=focal_alpha,
-            **best_params
-        )
-    else:
-        # Create model
-        model = ModelFactory.create_model(model_type, **best_params)
+    # Note: Since we've updated the XGBoostModel to accept all parameters
+    # directly, we don't need special handling anymore - just pass them all
+    model = ModelFactory.create_model(model_type, **best_params)
     
     # Train model on unscaled data (scaling is done in pipeline)
     model.train(X_train, y_train)
@@ -121,17 +107,7 @@ def optimize_and_evaluate(df, model_type='xgboost', use_feature_pruning=True, n_
         X_train_pruned, X_test_pruned = prune_features(X_train, X_test, top_features)
         
         # Train new model on pruned features
-        if model_type == 'xgboost' and use_focal_loss:
-            model_pruned = ModelFactory.create_model(
-                model_type, 
-                use_focal_loss=use_focal_loss, 
-                focal_gamma=focal_gamma,
-                focal_alpha=focal_alpha,
-                **best_params
-            )
-        else:
-            model_pruned = ModelFactory.create_model(model_type, **best_params)
-            
+        model_pruned = ModelFactory.create_model(model_type, **best_params)
         model_pruned.train(X_train_pruned, y_train)
         
         # Predictions on pruned features

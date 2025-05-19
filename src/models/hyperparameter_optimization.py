@@ -188,6 +188,7 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
             import xgboost as xgb
             from sklearn.pipeline import make_pipeline
             from sklearn.preprocessing import StandardScaler
+            from sklearn.model_selection import cross_val_score
             
             # Define hyperparameters to optimize
             params = {
@@ -215,50 +216,77 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
                 focal_alpha = None
                 class_weight = trial.suggest_categorical('class_weight', ['balanced', None])
             
-            # Create model with suggested hyperparameters
-            model = xgb.XGBClassifier(
-                objective='binary:logistic',
-                random_state=random_state,
-                n_jobs=-1,
-                **params
-            )
-            
-            # Create pipeline with scaling
-            pipeline = make_pipeline(StandardScaler(), model)
+            # Create custom evaluation function for cross-validation
+            def custom_cv_score(estimator, X, y, cv):
+                # Create simple dataset splits
+                scores = []
+                for train_idx, test_idx in cv.split(X):
+                    X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+                    y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+                    
+                    # Create and train model
+                    model_copy = xgb.XGBClassifier(
+                        objective='binary:logistic',
+                        random_state=random_state,
+                        n_jobs=-1,
+                        **params
+                    )
+                    
+                    # Special handling for class imbalance
+                    if use_focal_loss:
+                        # Import from src
+                        from src.models.xgboost_model import XGBoostModel
+                        
+                        # Create a dedicated XGBoostModel
+                        custom_model = XGBoostModel(
+                            use_focal_loss=True,
+                            focal_gamma=focal_gamma,
+                            focal_alpha=focal_alpha,
+                            **params
+                        )
+                        custom_model.train(X_train, y_train)
+                        
+                        # Get predictions
+                        y_pred = custom_model.predict(X_test)
+                        y_pred_binary = (y_pred > 0.5).astype(int)
+                        
+                        # Calculate accuracy
+                        score = (y_pred_binary == y_test).mean()
+                    else:
+                        # Handle class weights using sample weights
+                        if class_weight == 'balanced':
+                            # Calculate class weights
+                            class_counts = np.bincount(y_train)
+                            total_samples = len(y_train)
+                            class_weights = total_samples / (len(class_counts) * class_counts)
+                            
+                            # Apply weights to samples
+                            sample_weights = np.ones(len(y_train))
+                            for i, weight in enumerate(class_weights):
+                                sample_weights[y_train == i] = weight
+                                
+                            # Train with sample weights
+                            model_copy.fit(X_train, y_train, sample_weight=sample_weights)
+                        else:
+                            # Standard training
+                            model_copy.fit(X_train, y_train)
+                        
+                        # Use predict method for standard models
+                        score = model_copy.score(X_test, y_test)
+                    
+                    scores.append(score)
+                
+                return np.mean(scores)
             
             # Use TimeSeriesSplit for cross-validation
             tscv = TimeSeriesSplit(n_splits=n_splits)
             
-            # Handle class imbalance
-            if use_focal_loss:
-                # Custom implementation would be needed for cross-validation
-                # For simplicity, we'll skip focal loss in cross-validation
-                # and just use the class_weight option
-                class_weight_param = 'balanced'
-                fit_params = {'xgbclassifier__sample_weight': get_sample_weights(y, class_weight_param)}
-            elif class_weight == 'balanced':
-                fit_params = {'xgbclassifier__sample_weight': get_sample_weights(y, class_weight)}
-            else:
-                fit_params = {}
+            # Perform custom cross-validation
+            score = custom_cv_score(None, X, y, tscv)
             
-            # Evaluate model with cross-validation
-            scores = []
-            for train_idx, test_idx in tscv.split(X):
-                X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
-                y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
-                
-                if fit_params:
-                    train_weights = fit_params['xgbclassifier__sample_weight'][train_idx]
-                    pipeline.fit(X_train, y_train, xgbclassifier__sample_weight=train_weights)
-                else:
-                    pipeline.fit(X_train, y_train)
-                
-                score = pipeline.score(X_test, y_test)
-                scores.append(score)
+            # Return the mean score
+            return score
             
-            # Return mean score
-            return np.mean(scores)
-        
         except ImportError:
             # If XGBoost is not available, return a bad score
             return 0.0

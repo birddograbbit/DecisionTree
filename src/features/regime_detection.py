@@ -11,7 +11,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.colors import LinearSegmentedColormap
+import logging
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class RegimeDetector:
     """
@@ -54,16 +58,48 @@ class RegimeDetector:
         pd.DataFrame
             DataFrame with regime information
         """
+        try:
+            if self.method == 'trend_volatility':
+                return self._detect_trend_volatility_regime(data)
+            elif self.method == 'ma_crossover':
+                return self._detect_ma_crossover_regime(data)
+            elif self.method == 'volatility_regimes':
+                return self._detect_volatility_regime(data)
+            elif self.method == 'statistical':
+                return self._detect_statistical_regime(data)
+            else:
+                raise ValueError(f"Unknown regime detection method: {self.method}")
+        except Exception as e:
+            logger.error(f"Error in regime detection: {e}")
+            # Create a basic regime history with minimal information to avoid further errors
+            self._create_fallback_regime_history(data)
+            return self.regime_history
+            
+    def _create_fallback_regime_history(self, data):
+        """
+        Create a fallback regime history if detection fails.
+        
+        Parameters:
+        -----------
+        data : pd.DataFrame
+            Price data
+        """
+        logger.info("Creating fallback regime history due to regime detection failure")
+        result = pd.DataFrame(index=data.index)
+        result['close'] = data['close']
+        result['regime'] = 0
+        result['regime_label'] = 'neutral'
+        
+        # Add minimal columns depending on method
         if self.method == 'trend_volatility':
-            return self._detect_trend_volatility_regime(data)
-        elif self.method == 'ma_crossover':
-            return self._detect_ma_crossover_regime(data)
-        elif self.method == 'volatility_regimes':
-            return self._detect_volatility_regime(data)
-        elif self.method == 'statistical':
-            return self._detect_statistical_regime(data)
-        else:
-            raise ValueError(f"Unknown regime detection method: {self.method}")
+            result['trend'] = 0
+            result['vol_regime'] = 0
+            result['volatility'] = 0.0
+            result['vol_rank'] = 0.5
+            result['fast_ma'] = data['close']
+            result['slow_ma'] = data['close']
+        
+        self.regime_history = result
     
     def _detect_trend_volatility_regime(self, data):
         """
@@ -107,9 +143,16 @@ class RegimeDetector:
         # Calculate historical volatility
         result['volatility'] = result['returns'].rolling(window=vol_window).std() * np.sqrt(252)  # Annualized
         
-        # Calculate volatility percentile
-        result['vol_rank'] = result['volatility'].rolling(window=252).apply(
-            lambda x: pd.Series(x).rank(pct=True).iloc[-1], raw=False)
+        # Calculate volatility percentile with NaN handling
+        try:
+            result['vol_rank'] = result['volatility'].rolling(window=252).apply(
+                lambda x: pd.Series(x).rank(pct=True).iloc[-1] if not pd.isna(x.iloc[-1]) else np.nan, raw=False)
+        except Exception as e:
+            logger.warning(f"Error calculating vol_rank: {e}")
+            result['vol_rank'] = 0.5  # Default to middle rank if calculation fails
+        
+        # Fill NaN values to avoid downstream issues
+        result['vol_rank'] = result['vol_rank'].fillna(0.5)
         
         # Determine volatility regime
         result['vol_regime'] = 0  # 1 for high volatility, 0 for normal, -1 for low volatility
@@ -133,6 +176,8 @@ class RegimeDetector:
         }
         
         result['regime_label'] = result['regime'].map(regime_labels)
+        # Fill any NaN values in regime_label that might result from unknown regime values
+        result['regime_label'] = result['regime_label'].fillna('neutral')
         
         # Store regime history
         self.regime_history = result[['close', 'fast_ma', 'slow_ma', 'volatility', 'vol_rank', 'trend', 'vol_regime', 'regime', 'regime_label']]
@@ -185,6 +230,12 @@ class RegimeDetector:
         # Weak downtrend: short < medium, medium >= long
         weak_downtrend = (result['short_ma'] < result['medium_ma']) & (result['medium_ma'] >= result['long_ma'])
         
+        # Handle NaN values in conditions
+        strong_uptrend = strong_uptrend.fillna(False)
+        weak_uptrend = weak_uptrend.fillna(False)
+        strong_downtrend = strong_downtrend.fillna(False)
+        weak_downtrend = weak_downtrend.fillna(False)
+        
         # Assign regime values
         result.loc[strong_uptrend, 'regime'] = 2   # Strong uptrend
         result.loc[weak_uptrend, 'regime'] = 1     # Weak uptrend
@@ -201,6 +252,7 @@ class RegimeDetector:
         }
         
         result['regime_label'] = result['regime'].map(regime_labels)
+        result['regime_label'] = result['regime_label'].fillna('neutral')
         
         # Store regime history
         self.regime_history = result[['close', 'short_ma', 'medium_ma', 'long_ma', 'regime', 'regime_label']]
@@ -247,15 +299,33 @@ class RegimeDetector:
             result['tr3'] = abs(result['low'] - result['close'].shift())
             result['true_range'] = result[['tr1', 'tr2', 'tr3']].max(axis=1)
             result['atr'] = result['true_range'].rolling(window=vol_window).mean()
-            result['atr_pct'] = result['atr'] / result['close']
             
-            # Calculate ATR percentile
-            result['atr_rank'] = result['atr_pct'].rolling(window=lookback).apply(
-                lambda x: pd.Series(x).rank(pct=True).iloc[-1], raw=False)
+            # Protect against division by zero
+            zero_close = (result['close'] == 0)
+            if zero_close.any():
+                logger.warning(f"Found {zero_close.sum()} rows with close price of 0, replacing with NaN")
+                result.loc[zero_close, 'close'] = np.nan
+                
+            result['atr_pct'] = result['atr'] / result['close'].replace(0, np.nan)
+            
+            # Calculate ATR percentile with error handling
+            try:
+                result['atr_rank'] = result['atr_pct'].rolling(window=lookback).apply(
+                    lambda x: pd.Series(x).rank(pct=True).iloc[-1] if not pd.isna(x.iloc[-1]) else np.nan, raw=False)
+            except Exception as e:
+                logger.warning(f"Error calculating atr_rank: {e}")
+                result['atr_rank'] = 0.5
         
-        # Calculate volatility percentile
-        result['vol_rank'] = result['volatility'].rolling(window=lookback).apply(
-            lambda x: pd.Series(x).rank(pct=True).iloc[-1], raw=False)
+        # Calculate volatility percentile with error handling
+        try:
+            result['vol_rank'] = result['volatility'].rolling(window=lookback).apply(
+                lambda x: pd.Series(x).rank(pct=True).iloc[-1] if not pd.isna(x.iloc[-1]) else np.nan, raw=False)
+        except Exception as e:
+            logger.warning(f"Error calculating vol_rank: {e}")
+            result['vol_rank'] = 0.5
+        
+        # Fill NaN values for vol_rank
+        result['vol_rank'] = result['vol_rank'].fillna(0.5)
         
         # Determine volatility regime
         result['regime'] = 0  # 1 for high volatility, 0 for normal, -1 for low volatility
@@ -270,6 +340,7 @@ class RegimeDetector:
         }
         
         result['regime_label'] = result['regime'].map(regime_labels)
+        result['regime_label'] = result['regime_label'].fillna('normal_volatility')
         
         # Select columns for regime history
         cols = ['close', 'volatility', 'vol_rank', 'regime', 'regime_label']
@@ -317,8 +388,12 @@ class RegimeDetector:
         # Calculate rolling standard deviation of deviations
         result['deviation_std'] = result['deviation'].rolling(window=std_window).std()
         
-        # Calculate z-score
-        result['z_score'] = result['deviation'] / result['deviation_std']
+        # Calculate z-score with protection against division by zero
+        result['z_score'] = np.where(
+            result['deviation_std'] > 0,
+            result['deviation'] / result['deviation_std'],
+            0  # Default z-score of 0 when std is 0
+        )
         
         # Determine regime based on z-score
         result['regime'] = 0  # 0 for mean-reverting
@@ -328,8 +403,13 @@ class RegimeDetector:
         # Calculate slope of moving average (trend direction)
         result['ma_slope'] = result['ma'].diff(20) / 20
         
-        # Normalize slope
-        result['ma_slope_norm'] = result['ma_slope'] / result['ma'] * 100  # Percentage slope
+        # Normalize slope with protection against division by zero
+        ma_nonzero = (result['ma'] != 0)
+        result['ma_slope_norm'] = np.where(
+            ma_nonzero,
+            result['ma_slope'] / result['ma'] * 100,  # Percentage slope
+            0  # Default to 0 slope when MA is 0
+        )
         
         # Determine trend based on slope
         result['trend'] = 0  # 0 for no significant trend
@@ -354,6 +434,7 @@ class RegimeDetector:
         }
         
         result['regime_label'] = result['combined_regime'].map(regime_labels)
+        result['regime_label'] = result['regime_label'].fillna('sideways_neutral')
         
         # Store regime history
         self.regime_history = result[['close', 'ma', 'deviation', 'z_score', 'ma_slope_norm', 'regime', 'trend', 'combined_regime', 'regime_label']]
@@ -393,18 +474,21 @@ class RegimeDetector:
         
         # Plot different moving averages based on the method
         if self.method == 'trend_volatility':
-            ax1.plot(df.index, df['fast_ma'], label=f"Fast MA ({self.params.get('fast_window', 20)})")
-            ax1.plot(df.index, df['slow_ma'], label=f"Slow MA ({self.params.get('slow_window', 50)})")
+            if 'fast_ma' in df.columns and 'slow_ma' in df.columns:
+                ax1.plot(df.index, df['fast_ma'], label=f"Fast MA ({self.params.get('fast_window', 20)})")
+                ax1.plot(df.index, df['slow_ma'], label=f"Slow MA ({self.params.get('slow_window', 50)})")
         elif self.method == 'ma_crossover':
-            ax1.plot(df.index, df['short_ma'], label=f"Short MA ({self.params.get('short_window', 10)})")
-            ax1.plot(df.index, df['medium_ma'], label=f"Medium MA ({self.params.get('medium_window', 50)})")
-            ax1.plot(df.index, df['long_ma'], label=f"Long MA ({self.params.get('long_window', 200)})")
+            if all(col in df.columns for col in ['short_ma', 'medium_ma', 'long_ma']):
+                ax1.plot(df.index, df['short_ma'], label=f"Short MA ({self.params.get('short_window', 10)})")
+                ax1.plot(df.index, df['medium_ma'], label=f"Medium MA ({self.params.get('medium_window', 50)})")
+                ax1.plot(df.index, df['long_ma'], label=f"Long MA ({self.params.get('long_window', 200)})")
         elif self.method == 'statistical':
-            ax1.plot(df.index, df['ma'], label=f"MA ({self.params.get('ma_window', 50)})")
+            if 'ma' in df.columns:
+                ax1.plot(df.index, df['ma'], label=f"MA ({self.params.get('ma_window', 50)})")
         
         # Plot regions with different regimes
         if 'regime_label' in df.columns:
-            labels = df['regime_label'].unique()
+            labels = df['regime_label'].dropna().unique()
             
             # Define color mapping based on regime types
             regime_colors = {}
@@ -495,7 +579,7 @@ class RegimeDetector:
         ax2 = axes[1]
         
         # Determine what to plot based on the method
-        if self.method == 'trend_volatility':
+        if self.method == 'trend_volatility' and all(col in df.columns for col in ['trend', 'vol_regime']):
             # Create a colormap for regime
             scatter = ax2.scatter(df.index, df['trend'], c=df['vol_regime'], 
                                  cmap='coolwarm', marker='o', s=30, alpha=0.7)
@@ -507,7 +591,7 @@ class RegimeDetector:
             colorbar.set_ticks([-1, 0, 1])
             colorbar.set_ticklabels(['Low', 'Normal', 'High'])
             
-        elif self.method == 'ma_crossover':
+        elif self.method == 'ma_crossover' and 'regime' in df.columns:
             # Plot regime directly
             ax2.plot(df.index, df['regime'], marker='o', markersize=3, linewidth=1)
             ax2.set_ylim(-2.5, 2.5)
@@ -515,7 +599,7 @@ class RegimeDetector:
             ax2.set_yticklabels(['Strong Downtrend', 'Weak Downtrend', 'Neutral', 
                                 'Weak Uptrend', 'Strong Uptrend'])
             
-        elif self.method == 'volatility_regimes':
+        elif self.method == 'volatility_regimes' and all(col in df.columns for col in ['volatility', 'vol_rank']):
             # Plot volatility and its rank
             ax2_vol = ax2
             ax2_vol.plot(df.index, df['volatility'], color='blue', label='Volatility')
@@ -539,7 +623,7 @@ class RegimeDetector:
             lines2, labels2 = ax2_rank.get_legend_handles_labels()
             ax2.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
             
-        elif self.method == 'statistical':
+        elif self.method == 'statistical' and all(col in df.columns for col in ['z_score', 'ma_slope_norm']):
             # Plot z-score and MA slope
             ax2_z = ax2
             ax2_z.plot(df.index, df['z_score'], color='blue', label='Z-Score')
@@ -569,7 +653,7 @@ class RegimeDetector:
         # Create legend patches for regimes
         regime_patches = []
         for label, color in regime_colors.items():
-            if label in df['regime_label'].unique():
+            if label in df['regime_label'].dropna().unique():
                 patch = mpatches.Patch(color=color, alpha=0.2, label=label)
                 regime_patches.append(patch)
         
@@ -592,51 +676,66 @@ class RegimeDetector:
             Information about the current regime
         """
         if self.regime_history is None or len(self.regime_history) == 0:
-            raise ValueError("No regime history available. Run detect_regime first.")
+            logger.warning("No regime history available. Returning default neutral regime.")
+            return {
+                'date': pd.Timestamp.now(),
+                'close': np.nan,
+                'regime_label': 'neutral'
+            }
         
-        # Get the latest row from regime history
-        last_row = self.regime_history.iloc[-1]
-        
-        # Create a dictionary with regime information
-        regime_info = {
-            'date': last_row.name,
-            'close': last_row['close'],
-            'regime_label': last_row.get('regime_label', None)
-        }
-        
-        # Add method-specific information
-        if self.method == 'trend_volatility':
-            regime_info.update({
-                'trend': last_row['trend'],
-                'volatility_regime': last_row['vol_regime'],
-                'volatility': last_row['volatility'],
-                'volatility_rank': last_row['vol_rank']
-            })
-        elif self.method == 'ma_crossover':
-            regime_info.update({
-                'regime_value': last_row['regime']
-            })
-        elif self.method == 'volatility_regimes':
-            regime_info.update({
-                'volatility': last_row['volatility'],
-                'volatility_rank': last_row['vol_rank'],
-                'regime_value': last_row['regime']
-            })
-            if 'atr' in last_row:
-                regime_info.update({
-                    'atr': last_row['atr'],
-                    'atr_rank': last_row['atr_rank']
-                })
-        elif self.method == 'statistical':
-            regime_info.update({
-                'z_score': last_row['z_score'],
-                'ma_slope': last_row['ma_slope_norm'],
-                'trend': last_row['trend'],
-                'regime_value': last_row['regime'],
-                'combined_regime': last_row['combined_regime']
-            })
-        
-        return regime_info
+        try:
+            # Get the latest row from regime history
+            last_row = self.regime_history.iloc[-1]
+            
+            # Create a dictionary with regime information
+            regime_info = {
+                'date': last_row.name,
+                'close': last_row['close'],
+                'regime_label': last_row.get('regime_label', 'neutral')
+            }
+            
+            # Add method-specific information if columns exist
+            if self.method == 'trend_volatility':
+                cols_to_add = ['trend', 'vol_regime', 'volatility', 'vol_rank']
+                for col in cols_to_add:
+                    if col in last_row:
+                        if col == 'vol_regime':
+                            regime_info['volatility_regime'] = last_row[col]
+                        else:
+                            regime_info[col] = last_row[col]
+                            
+            elif self.method == 'ma_crossover':
+                if 'regime' in last_row:
+                    regime_info['regime_value'] = last_row['regime']
+                    
+            elif self.method == 'volatility_regimes':
+                cols_to_add = ['volatility', 'vol_rank', 'regime']
+                for col in cols_to_add:
+                    if col in last_row:
+                        if col == 'regime':
+                            regime_info['regime_value'] = last_row[col]
+                        else:
+                            regime_info[col] = last_row[col]
+                            
+                if 'atr' in last_row and 'atr_rank' in last_row:
+                    regime_info['atr'] = last_row['atr']
+                    regime_info['atr_rank'] = last_row['atr_rank']
+                    
+            elif self.method == 'statistical':
+                cols_to_add = ['z_score', 'ma_slope_norm', 'trend', 'regime', 'combined_regime']
+                for col in cols_to_add:
+                    if col in last_row:
+                        regime_info[col] = last_row[col]
+            
+            return regime_info
+            
+        except Exception as e:
+            logger.error(f"Error getting current regime: {e}")
+            return {
+                'date': pd.Timestamp.now(),
+                'close': np.nan,
+                'regime_label': 'neutral'
+            }
     
     def get_regime_stats(self):
         """
@@ -650,35 +749,52 @@ class RegimeDetector:
         if self.regime_history is None or len(self.regime_history) == 0:
             raise ValueError("No regime history available. Run detect_regime first.")
         
-        # Create a copy of regime history
-        df = self.regime_history.copy()
-        
-        # Calculate returns
-        df['returns'] = df['close'].pct_change()
-        
-        # Calculate statistics for each regime
-        regime_stats = df.groupby('regime_label')['returns'].agg([
-            ('count', 'count'),
-            ('mean', 'mean'),
-            ('median', 'median'),
-            ('std', 'std'),
-            ('min', 'min'),
-            ('max', 'max'),
-            ('positive_pct', lambda x: (x > 0).mean())
-        ])
-        
-        # Annualize returns and risk
-        trading_days = 252
-        regime_stats['ann_return'] = regime_stats['mean'] * trading_days
-        regime_stats['ann_risk'] = regime_stats['std'] * np.sqrt(trading_days)
-        regime_stats['sharpe'] = regime_stats['ann_return'] / regime_stats['ann_risk']
-        
-        # Calculate percentage of time in each regime
-        regime_stats['time_pct'] = regime_stats['count'] / len(df)
-        
-        # Order columns
-        cols = ['count', 'time_pct', 'mean', 'median', 'ann_return', 'ann_risk', 'sharpe', 'positive_pct', 'min', 'max', 'std']
-        regime_stats = regime_stats[cols]
-        
-        return regime_stats
-
+        try:
+            # Create a copy of regime history
+            df = self.regime_history.copy()
+            
+            # Calculate returns if not already present
+            if 'returns' not in df.columns:
+                df['returns'] = df['close'].pct_change()
+            
+            # Calculate statistics for each regime
+            regime_stats = df.groupby('regime_label')['returns'].agg([
+                ('count', 'count'),
+                ('mean', 'mean'),
+                ('median', 'median'),
+                ('std', 'std'),
+                ('min', 'min'),
+                ('max', 'max'),
+                ('positive_pct', lambda x: (x > 0).mean())
+            ])
+            
+            # Annualize returns and risk with safe division
+            trading_days = 252
+            regime_stats['ann_return'] = regime_stats['mean'] * trading_days
+            regime_stats['ann_risk'] = regime_stats['std'] * np.sqrt(trading_days)
+            
+            # Calculate Sharpe ratio with protection against division by zero
+            regime_stats['sharpe'] = np.where(
+                regime_stats['ann_risk'] > 0,
+                regime_stats['ann_return'] / regime_stats['ann_risk'],
+                0  # Default value when risk is 0
+            )
+            
+            # Calculate percentage of time in each regime
+            total_days = len(df)
+            if total_days > 0:  # Avoid division by zero
+                regime_stats['time_pct'] = regime_stats['count'] / total_days
+            else:
+                regime_stats['time_pct'] = 0
+            
+            # Order columns
+            cols = ['count', 'time_pct', 'mean', 'median', 'ann_return', 'ann_risk', 'sharpe', 'positive_pct', 'min', 'max', 'std']
+            regime_stats = regime_stats[cols]
+            
+            return regime_stats
+            
+        except Exception as e:
+            logger.error(f"Error calculating regime stats: {e}")
+            # Return empty DataFrame with the expected columns
+            cols = ['count', 'time_pct', 'mean', 'median', 'ann_return', 'ann_risk', 'sharpe', 'positive_pct', 'min', 'max', 'std']
+            return pd.DataFrame(columns=cols)

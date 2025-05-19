@@ -144,7 +144,7 @@ REGIME_ADAPTIVE_RF_CONFIG = {
     'position_sizing': 'confidence',
     'consecutive_buys': False,
     'min_holding_days': 1,
-    'use_adaptive_thresholds': 'always',  # Always use adaptive thresholds
+    'use_adaptive_thresholds': 'auto',  # always,never,auto use adaptive thresholds, 
     'buy_percentile': 80,                 # Use 80th percentile as buy threshold 
     'sell_percentile': 20                 # Use 20th percentile as sell threshold
 }

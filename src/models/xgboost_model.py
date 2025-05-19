@@ -18,6 +18,70 @@ from .base_model import BaseModel
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+class FocalLoss:
+    """
+    Focal Loss implementation for XGBoost.
+    
+    Focal Loss is a modified version of Cross-Entropy Loss that reduces
+    the relative loss for well-classified examples and focuses more on
+    difficult examples.
+    
+    Parameters:
+    -----------
+    gamma : float
+        Focusing parameter (default: 2.0)
+        Controls how much to down-weight easy examples
+    alpha : float
+        Class balancing parameter (default: 0.25)
+        Controls the weight of the rare class
+    """
+    
+    def __init__(self, gamma=2.0, alpha=0.25):
+        self.gamma = gamma
+        self.alpha = alpha
+    
+    def __call__(self, y_pred, y_true):
+        """
+        Calculate focal loss gradient and hessian.
+        
+        Parameters:
+        -----------
+        y_pred : numpy.ndarray
+            Predictions (probabilities after sigmoid)
+        y_true : xgboost.DMatrix
+            Ground truth labels
+            
+        Returns:
+        --------
+        tuple
+            (Gradient, Hessian)
+        """
+        # Extract true labels
+        y = y_true.get_label()
+        
+        # Convert to numpy array
+        y_pred = np.array(y_pred)
+        
+        # Apply sigmoid to get probabilities
+        y_pred = 1.0 / (1.0 + np.exp(-y_pred))
+        
+        # Calculate p_t
+        p_t = y_pred * y + (1 - y_pred) * (1 - y)
+        
+        # Calculate alpha_t
+        alpha_t = self.alpha * y + (1 - self.alpha) * (1 - y)
+        
+        # Calculate focal weight
+        focal_weight = alpha_t * (1 - p_t) ** self.gamma
+        
+        # Calculate gradient
+        grad = -focal_weight * (y - y_pred)
+        
+        # Calculate hessian (second derivative)
+        hess = focal_weight * y_pred * (1 - y_pred)
+        
+        return grad, hess
+
 class XGBoostModel(BaseModel):
     """
     XGBoost implementation of the BaseModel interface.
@@ -33,7 +97,9 @@ class XGBoostModel(BaseModel):
 
     def __init__(self, n_estimators=100, max_depth=5, learning_rate=0.1,
                  subsample=0.8, colsample_bytree=0.8, gamma=0, 
-                 objective='binary:logistic', random_state=42, n_jobs=-1):
+                 objective='binary:logistic', random_state=42, n_jobs=-1,
+                 class_weight=None, use_focal_loss=False, 
+                 focal_gamma=2.0, focal_alpha=0.25):
         """
         Initialize the XGBoost model.
         
@@ -57,6 +123,15 @@ class XGBoostModel(BaseModel):
             Random seed for reproducibility
         n_jobs : int, default=-1
             Number of parallel threads used to run xgboost
+        class_weight : dict or 'balanced', default=None
+            Weights associated with classes
+            If 'balanced', class weights are automatically calculated
+        use_focal_loss : bool, default=False
+            Whether to use focal loss for imbalanced classes
+        focal_gamma : float, default=2.0
+            Focusing parameter for focal loss
+        focal_alpha : float, default=0.25
+            Class balancing parameter for focal loss
         """
         if not XGBOOST_AVAILABLE:
             raise ImportError("XGBoost is not installed. Cannot create XGBoostModel.")
@@ -72,6 +147,14 @@ class XGBoostModel(BaseModel):
             'random_state': random_state,
             'n_jobs': n_jobs
         }
+        
+        # Store additional parameters for class imbalance handling
+        self.class_weight = class_weight
+        self.use_focal_loss = use_focal_loss
+        self.focal_gamma = focal_gamma
+        self.focal_alpha = focal_alpha
+        
+        # Initialize base model
         self._base = xgb.XGBClassifier(**self.params)
         self._clf = None  # Will hold the pipeline
         self.feature_names = None
@@ -95,9 +178,62 @@ class XGBoostModel(BaseModel):
         # Store feature names if available (for feature importance)
         self.feature_names = X.columns if hasattr(X, 'columns') else None
         
-        # Build pipeline with scaling
-        self._clf = make_pipeline(StandardScaler(), self._base)
-        self._clf.fit(X, y)
+        # Handle class imbalance
+        if self.use_focal_loss:
+            # Use custom focal loss objective function
+            dtrain = xgb.DMatrix(X, label=y)
+            focal_loss_obj = FocalLoss(gamma=self.focal_gamma, alpha=self.focal_alpha)
+            
+            # Update parameters for custom objective
+            params = self.params.copy()
+            params.pop('n_estimators', None)  # Remove n_estimators (used in fit)
+            params.pop('objective', None)     # Remove default objective
+            
+            # Train with custom objective
+            self._base = xgb.train(
+                params=params,
+                dtrain=dtrain,
+                num_boost_round=self.params['n_estimators'],
+                obj=focal_loss_obj
+            )
+            
+            # Create a pipeline with StandardScaler
+            self._clf = make_pipeline(StandardScaler(), self._base)
+            
+            # No need to fit the pipeline again as we've already trained the model
+            return self
+            
+        elif self.class_weight == 'balanced':
+            # Calculate balanced class weights
+            class_counts = np.bincount(y)
+            total_samples = len(y)
+            weight_for_0 = total_samples / (2 * class_counts[0])
+            weight_for_1 = total_samples / (2 * class_counts[1])
+            
+            # Set sample weights
+            sample_weights = np.ones(len(y))
+            sample_weights[y == 0] = weight_for_0
+            sample_weights[y == 1] = weight_for_1
+            
+            # Build pipeline with scaling
+            self._clf = make_pipeline(StandardScaler(), self._base)
+            self._clf.fit(X, y, xgbclassifier__sample_weight=sample_weights)
+            
+        elif isinstance(self.class_weight, dict):
+            # Convert class weight dictionary to sample weights
+            sample_weights = np.ones(len(y))
+            for class_val, weight in self.class_weight.items():
+                sample_weights[y == class_val] = weight
+            
+            # Build pipeline with scaling
+            self._clf = make_pipeline(StandardScaler(), self._base)
+            self._clf.fit(X, y, xgbclassifier__sample_weight=sample_weights)
+            
+        else:
+            # Standard training without class weights
+            self._clf = make_pipeline(StandardScaler(), self._base)
+            self._clf.fit(X, y)
+            
         return self
 
     def predict(self, X):
@@ -114,7 +250,13 @@ class XGBoostModel(BaseModel):
         np.ndarray
             Predicted probabilities for positive class (class 1)
         """
-        return self._clf.predict_proba(X)[:, 1]  # Probability of positive class
+        if self.use_focal_loss:
+            # For custom objective function
+            dX = xgb.DMatrix(X)
+            return self._base.predict(dX)
+        else:
+            # For standard objective
+            return self._clf.predict_proba(X)[:, 1]  # Probability of positive class
 
     def get_feature_importance(self):
         """
@@ -126,10 +268,35 @@ class XGBoostModel(BaseModel):
             Feature importance scores
         """
         if self.feature_names is None:
-            return self._base.feature_importances_
+            if self.use_focal_loss:
+                # Get importance for custom objective
+                return self._base.get_score(importance_type='gain')
+            else:
+                # Standard importance
+                return self._base.feature_importances_
         else:
-            # Return dictionary mapping feature names to importance scores
-            return dict(zip(self.feature_names, self._base.feature_importances_))
+            if self.use_focal_loss:
+                # Get feature importance for custom objective
+                importances = self._base.get_score(importance_type='gain')
+                
+                # Convert feature index to feature names
+                named_importances = {}
+                for key, value in importances.items():
+                    if key.startswith('f'):
+                        # If key is f0, f1, etc., convert to feature name
+                        try:
+                            idx = int(key[1:])
+                            if idx < len(self.feature_names):
+                                named_importances[self.feature_names[idx]] = value
+                        except ValueError:
+                            named_importances[key] = value
+                    else:
+                        named_importances[key] = value
+                        
+                return named_importances
+            else:
+                # Return dictionary mapping feature names to importance scores
+                return dict(zip(self.feature_names, self._base.feature_importances_))
 
     def save(self, path):
         """
@@ -178,7 +345,13 @@ class XGBoostModel(BaseModel):
         
     def __str__(self):
         """String representation of the model."""
-        return f"XGBoostModel(n_estimators={self.params['n_estimators']}, " \
+        base_str = f"XGBoostModel(n_estimators={self.params['n_estimators']}, " \
                f"max_depth={self.params['max_depth']}, " \
                f"learning_rate={self.params['learning_rate']})"
-
+               
+        if self.use_focal_loss:
+            base_str += f", focal_loss(gamma={self.focal_gamma}, alpha={self.focal_alpha})"
+        elif self.class_weight:
+            base_str += f", class_weight={self.class_weight}"
+            
+        return base_str

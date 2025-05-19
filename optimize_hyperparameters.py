@@ -20,6 +20,15 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 
+# Check for XGBoost availability
+try:
+    import xgboost as xgb
+    XGBOOST_AVAILABLE = True
+except ImportError:
+    XGBOOST_AVAILABLE = False
+    print("Warning: XGBoost is not installed. XGBoost optimization will not be available.")
+    print("To install XGBoost: pip install xgboost")
+
 from src.data.preprocessing import preprocess_data
 from src.features.regime_detection import RegimeDetector
 from src.models.hyperparameter_manager import HyperparameterManager

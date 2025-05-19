@@ -19,6 +19,7 @@ from src.data.preprocessing import preprocess_data
 from src.strategies.trend_following import TrendFollowingStrategy
 from src.strategies.regime_adaptive_strategy import RegimeAdaptiveStrategy
 from src.models.model_factory import ModelFactory
+from src.models.hyperparameter_manager import HyperparameterManager
 from strategy_configs import STRATEGY_CONFIGS
 
 def load_data(data_path, symbol='SPY'):
@@ -68,7 +69,7 @@ def load_data(data_path, symbol='SPY'):
     return df
 
 def run_strategy_comparison(data_path, output_dir='results_comparison', 
-                           train_end_date=None, symbol='SPY'):
+                           train_end_date=None, symbol='SPY', use_optimized_params=False):
     """
     Run comparison of different strategies/models.
     
@@ -83,6 +84,8 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         If None, uses 70% of data for training
     symbol : str, default='SPY'
         Trading symbol
+    use_optimized_params : bool, default=False
+        Whether to use optimized hyperparameters for models
         
     Returns:
     --------
@@ -109,21 +112,14 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
     print(f"Training data: {len(train_data)} rows ({train_data.index[0]} to {train_data.index[-1]})")
     print(f"Testing data: {len(test_data)} rows ({test_data.index[0]} to {test_data.index[-1]})")
     
-    # Use predefined strategy configurations from strategy_configs.py
-    strategy_configs = [
-        STRATEGY_CONFIGS['decision_tree'],
-        STRATEGY_CONFIGS['decision_tree_calibrated'],
-        STRATEGY_CONFIGS['random_forest'],
-        STRATEGY_CONFIGS['random_forest_calibrated'],
-        STRATEGY_CONFIGS['xgboost_fixed'],
-        STRATEGY_CONFIGS['xgboost_confidence'],
-        STRATEGY_CONFIGS['stacking'],
-        STRATEGY_CONFIGS['regime_adaptive_rf']
-    ]
+    # Get strategy configurations
+    strategy_configs = get_strategy_configs(use_optimized_params)
     
     # Set symbol for all configs
     for config in strategy_configs:
         config['symbol'] = symbol
+        if use_optimized_params:
+            config['use_optimized'] = True
     
     # Run strategies
     results = {}
@@ -284,9 +280,46 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
 
     return results
 
+def get_strategy_configs(use_optimized_params=False):
+    """
+    Get strategy configurations, optionally using optimized hyperparameters.
+    
+    Parameters:
+    -----------
+    use_optimized_params : bool
+        Whether to use optimized hyperparameters
+        
+    Returns:
+    --------
+    list
+        List of strategy configurations
+    """
+    # Use predefined strategy configurations from strategy_configs.py
+    strategy_configs = [
+        STRATEGY_CONFIGS['decision_tree'].copy(),
+        STRATEGY_CONFIGS['decision_tree_calibrated'].copy(),
+        STRATEGY_CONFIGS['random_forest'].copy(),
+        STRATEGY_CONFIGS['random_forest_calibrated'].copy(),
+        STRATEGY_CONFIGS['xgboost_fixed'].copy(),
+        STRATEGY_CONFIGS['xgboost_confidence'].copy(),
+        STRATEGY_CONFIGS['stacking'].copy(),
+        STRATEGY_CONFIGS['regime_adaptive_rf'].copy()
+    ]
+    
+    # If using optimized parameters, set flag in config
+    if use_optimized_params:
+        for config in strategy_configs:
+            config['use_optimized'] = True
+            
+            # For regime-adaptive strategies, enable regime-specific hyperparameters
+            if 'Regime Adaptive' in config['name']:
+                config['use_regime_specific_params'] = True
+    
+    return strategy_configs
+
 def run_single_strategy(data_path, model_type='random_forest', output_dir='results',
                        train_end_date=None, symbol='SPY', strategy_type='trend_following',
-                       calibrate=False):
+                       calibrate=False, use_optimized_params=False):
     """
     Run a single strategy with specified parameters.
     
@@ -307,6 +340,8 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         Type of strategy to use ('trend_following' or 'regime_adaptive')
     calibrate : bool, default=False
         Whether to use probability calibration for Decision Tree and Random Forest models
+    use_optimized_params : bool, default=False
+        Whether to use optimized hyperparameters for models
         
     Returns:
     --------
@@ -329,6 +364,10 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         train_size = int(len(df) * 0.7)
         train_data = df.iloc[:train_size]
         test_data = df.iloc[train_size:]
+    
+    # Print training and testing data info
+    print(f"Training data: {len(train_data)} rows ({train_data.index[0]} to {train_data.index[-1]})")
+    print(f"Testing data: {len(test_data)} rows ({test_data.index[0]} to {test_data.index[-1]})")
     
     # Select appropriate configuration from STRATEGY_CONFIGS
     config_key = None
@@ -365,6 +404,14 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     
     # Set symbol
     config['symbol'] = symbol
+    
+    # Set optimized parameters flag
+    if use_optimized_params:
+        config['use_optimized'] = True
+        
+        # For regime-adaptive strategies, enable regime-specific hyperparameters
+        if strategy_type == 'regime_adaptive':
+            config['use_regime_specific_params'] = True
     
     # Initialize and run strategy
     if strategy_type == 'regime_adaptive':
@@ -526,6 +573,9 @@ def parse_arguments():
     parser.add_argument('--calibrate', action='store_true',
                         help='Use probability calibration for Decision Tree and Random Forest models')
     
+    parser.add_argument('--use-optimized', action='store_true',
+                        help='Use optimized hyperparameters for models')
+    
     parser.add_argument('--adaptive-thresholds', type=str, 
                         choices=['auto', 'always', 'never'], default='auto',
                         help='Adaptive threshold behavior (default: auto)')
@@ -545,14 +595,16 @@ def main():
             train_end_date=args.train_end,
             symbol=args.symbol,
             strategy_type=args.strategy,
-            calibrate=args.calibrate
+            calibrate=args.calibrate,
+            use_optimized_params=args.use_optimized
         )
     else:  # compare mode
         run_strategy_comparison(
             data_path=args.data,
             output_dir=args.output,
             train_end_date=args.train_end,
-            symbol=args.symbol
+            symbol=args.symbol,
+            use_optimized_params=args.use_optimized
         )
 
 if __name__ == "__main__":

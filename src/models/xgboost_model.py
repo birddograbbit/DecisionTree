@@ -187,12 +187,12 @@ class FocalLoss:
         
         return grad, hess
 
-class XGBoostModel(BaseModel):
+class XGBoostModel(BaseModel, BaseEstimator, ClassifierMixin):
     """
     XGBoost implementation of the BaseModel interface.
     
     This class wraps XGBoost's XGBClassifier to conform
-    to our BaseModel interface.
+    to our BaseModel interface and scikit-learn's estimator interface.
     """
 
     @property
@@ -283,7 +283,46 @@ class XGBoostModel(BaseModel):
         self._base = xgb.XGBClassifier(**self.params)
         self._clf = None  # Will hold the pipeline
         self.feature_names = None
+        
+        # For scikit-learn compatibility, store all parameters as attributes
+        self.n_estimators = n_estimators
+        self.max_depth = max_depth
+        self.learning_rate = learning_rate
+        self.subsample = subsample
+        self.colsample_bytree = colsample_bytree
+        self.gamma = gamma
+        self.objective = objective
+        self.random_state = random_state
+        self.n_jobs = n_jobs
+        self.min_child_weight = min_child_weight
+        self.reg_alpha = reg_alpha
+        self.reg_lambda = reg_lambda
+        self.scale_pos_weight = scale_pos_weight
 
+    def fit(self, X, y, sample_weight=None):
+        """
+        Fit the model to the data (scikit-learn compatible method).
+        
+        This is a wrapper around the train method to make it compatible
+        with scikit-learn's estimator interface.
+        
+        Parameters:
+        -----------
+        X : pd.DataFrame or np.ndarray
+            Feature matrix
+        y : pd.Series or np.ndarray
+            Target values
+        sample_weight : array-like or None, default=None
+            Sample weights
+            
+        Returns:
+        --------
+        self
+            For method chaining
+        """
+        # Use our existing train method
+        return self.train(X, y)
+        
     def train(self, X, y):
         """
         Train the model on given data.
@@ -391,6 +430,23 @@ class XGBoostModel(BaseModel):
         """
         # Always use predict_proba from the pipeline
         return self._clf.predict_proba(X)[:, 1]  # Probability of positive class
+        
+    def predict_proba(self, X):
+        """
+        Generate probability predictions (scikit-learn compatible method).
+        
+        Parameters:
+        -----------
+        X : pd.DataFrame or np.ndarray
+            Feature matrix
+            
+        Returns:
+        --------
+        np.ndarray
+            Array with probabilities for both classes
+        """
+        # Use the pipeline's predict_proba method
+        return self._clf.predict_proba(X)
 
     def get_feature_importance(self):
         """

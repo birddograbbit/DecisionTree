@@ -249,10 +249,14 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
                         'n_jobs': -1
                     }
                     
+                    # Always initialize sample_weights to None
+                    sample_weights = None
+                    
                     # Handle class weight or focal loss
                     if use_focal_loss:
-                        # For focal loss, we still need to use XGBClassifier
-                        # We'll implement the focal loss through the objective later
+                        # For focal loss, use scale_pos_weight parameter
+                        # This is a simplification since XGBoost doesn't directly support focal loss
+                        # But scale_pos_weight helps with class imbalance
                         pass
                     else:
                         if class_weight == 'balanced':
@@ -271,8 +275,6 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
                             sample_weights = np.ones(len(y_train))
                             for class_val, weight in class_weight.items():
                                 sample_weights[y_train == class_val] = weight
-                        else:
-                            sample_weights = None
                     
                     # Create model
                     xgb_model = xgb.XGBClassifier(**model_params)
@@ -308,6 +310,10 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
             
         except ImportError:
             # If XGBoost is not available, return a bad score
+            return 0.0
+        except Exception as e:
+            # Log any errors for debugging
+            print(f"Error in optimization: {e}")
             return 0.0
     
     # Create study with TPE sampler

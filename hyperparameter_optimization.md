@@ -138,6 +138,17 @@ data/
 │       └── xgboost_strong_uptrend_hyperparameters.pkl
 ```
 
+### Scheduling Hyperparameter Scans
+
+The `schedule_hyperparameter_scan.py` script automates running the optimization
+CLI at regular intervals using the `schedule` package.
+
+Run a weekly scan every Sunday at 02:00 with:
+
+```bash
+python schedule_hyperparameter_scan.py --data data/raw --day sunday --time 02:00
+```
+
 ## Future Enhancements
 
 Future enhancements to the hyperparameter optimization framework include:

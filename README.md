@@ -35,3 +35,8 @@ To audit features using permutation importance:
 python run_feature_audit.py --data data/raw/historical_data_STOCK_SPY_1_day2010-2025.csv --model random_forest --output results/audit
 ```
 
+To schedule weekly hyperparameter scans:
+```bash
+python schedule_hyperparameter_scan.py --data data/raw --day sunday --time 02:00
+```
+

@@ -20,6 +20,7 @@ import logging
 from pathlib import Path
 import numpy as np
 import pandas as pd
+import config
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ class HyperparameterManager:
     different model types, including support for regime-specific optimization.
     """
     
-    def __init__(self, base_path='data/hyperparameters'):
+    def __init__(self, base_path=config.HYPERPARAMS_DIR):
         """
         Initialize HyperparameterManager.
         

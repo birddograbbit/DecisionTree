@@ -325,3 +325,17 @@ For each test, the following criteria indicate successful implementation:
    - Performance metrics improve from baseline to Phase 1.5
 
 These tests should provide comprehensive validation of all implemented features and ensure the system is ready to proceed to Phase 2 of the roadmap.
+
+## Test Results (2025-05-20)
+
+All automated tests and manual commands were executed in the Codex environment. Key results:
+
+- `pytest` passed (tests/test_focal_loss.py)
+- Baseline strategy runs completed for Decision Tree, Random Forest and XGBoost models.
+- Strategy comparison and data range tests executed successfully.
+- Hyperparameter optimization commands ran for individual models and `all` option.
+- Feature importance script executed without errors after fixing model pipelines.
+- Regime-specific optimization succeeded after fixing index selection logic.
+- Regime-adaptive strategy ran with optimized parameters, producing summary metrics.
+
+No failing tests were encountered after applying the above fixes.

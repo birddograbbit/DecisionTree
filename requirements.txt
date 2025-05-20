@@ -12,4 +12,5 @@ xgboost>=1.5.0  # Optional: for XGBoost models
 optuna>=2.10.0  # Optional: for hyperparameter optimization
 
 # Development dependencies
-pytest>=6.2.5  # For running tests 
+pytest>=6.2.5  # For running tests
+schedule>=1.1.0  # For scheduled hyperparameter scans

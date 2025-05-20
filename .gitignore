@@ -33,6 +33,9 @@ venv.bak/
 
 # Project specific
 data/raw/
+# Allow specific testing data files
+!data/raw/historical_data_STOCK_SPY_1_day2000-2009.csv
+!data/raw/historical_data_STOCK_SPY_1_day2010-2025.csv
 data/processed/
 data/models/*.pkl
 results/

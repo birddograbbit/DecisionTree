@@ -83,6 +83,13 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
         # Initialize regime-specific models
         self.regime_models = {}
         
+        # Initialize backtest_engine (added to fix missing attribute issue)
+        self.backtest_engine = BacktestEngine(
+            initial_capital=self.config.get('initial_capital', 100000.0),
+            commission=self.config.get('commission', 0.001),
+            slippage=self.config.get('slippage', 0.001)
+        )
+        
     def _add_default_regime_params(self):
         """
         Add default parameters for all possible regimes to avoid key errors.
@@ -563,12 +570,57 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
             if hasattr(self, 'signal_engine') and self.signal_engine is not None:
                 signals = self.signal_engine.apply_filters(signals)
             
+            # Fix date ambiguity: Ensure the 'date' attribute isn't both in index and column
+            if isinstance(signals, pd.DataFrame) and 'date' in signals.columns and signals.index.name == 'date':
+                # Reset index to avoid ambiguity
+                signals = signals.reset_index(drop=True)
+            
             return signals
             
         except Exception as e:
             logger.error(f"Error in generate_signals: {e}")
             # Return base signals if regime adjustment fails
             return super().generate_signals(features, predictions, dates)
+
+    def predict(self, test_data):
+        """
+        Generate predictions and signals for the test data.
+        
+        Parameters:
+        -----------
+        test_data : pd.DataFrame
+            Test data
+            
+        Returns:
+        --------
+        tuple
+            (signals, predictions)
+        """
+        if not hasattr(self, 'is_trained') or not self.is_trained:
+            # Call parent train method if not already trained
+            super().train(test_data)
+            self.is_trained = True
+        
+        # Generate features
+        X_test, y_test, dates_test = self.generate_features(test_data)
+        
+        # Generate predictions
+        predictions = self.model_engine.predict(X_test)
+        
+        # Generate signals
+        signals = self.generate_signals(X_test, predictions, dates_test)
+        
+        # Fix date ambiguity: Ensure signals has a proper date column and no date index to avoid ambiguity
+        if isinstance(signals, pd.DataFrame):
+            if signals.index.name == 'date' and 'date' not in signals.columns:
+                # Add date column from index
+                signals['date'] = signals.index
+            
+            # If both index and column contain date, reset index to avoid ambiguity
+            if signals.index.name == 'date' and 'date' in signals.columns:
+                signals = signals.reset_index(drop=True)
+        
+        return signals, predictions
 
     def backtest(self, data, train_data=None, test_data=None):
         """
@@ -589,6 +641,14 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
             Backtest results
         """
         try:
+            # Ensure backtest_engine is initialized (fix for the missing attribute error)
+            if not hasattr(self, 'backtest_engine'):
+                self.backtest_engine = BacktestEngine(
+                    initial_capital=self.config.get('initial_capital', 100000.0),
+                    commission=self.config.get('commission', 0.001),
+                    slippage=self.config.get('slippage', 0.001)
+                )
+            
             # Ensure regimes are detected for the entire dataset
             if not self.regimes_detected:
                 logger.info("Detecting regimes for the full dataset")
@@ -655,14 +715,20 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
             # Generate signals (will use regime-specific models if available)
             signals = self.generate_signals(test_features, predictions, test_dates)
             
+            # Fix date ambiguity - CRITICAL FIX!
+            if isinstance(signals, pd.DataFrame):
+                if signals.index.name == 'date' and 'date' in signals.columns:
+                    signals = signals.reset_index(drop=True)
+                elif signals.index.name == 'date' and 'date' not in signals.columns:
+                    # If date is in the index but not a column, add it as a column
+                    signals = signals.reset_index()
+                    
+            # Create a dictionary with test data (for backtesting)
+            symbol = self.config.get('symbol', 'SPY')
+            test_data_dict = {symbol: test_data}
+            
             # Run backtest
-            backtest_results = self.backtest_engine.run_backtest(
-                data=test_data,
-                signals=signals,
-                initial_capital=100000,
-                commission=0.001,
-                slippage=0.001
-            )
+            backtest_results = self.backtest_engine.run_backtest(signals, test_data_dict)
             
             # Add regime analysis to results
             self._add_regime_analysis(backtest_results, test_data)
@@ -673,7 +739,45 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
             logger.error(f"Error in backtest: {e}")
             # If error occurs, try to run the parent's backtest without regime adaptation
             logger.info("Falling back to base TrendFollowingStrategy backtest")
-            return super().backtest(data, train_data, test_data)
+            
+            # Ensure we have a backtest_engine
+            if not hasattr(self, 'backtest_engine'):
+                self.backtest_engine = BacktestEngine(
+                    initial_capital=self.config.get('initial_capital', 100000.0),
+                    commission=self.config.get('commission', 0.001),
+                    slippage=self.config.get('slippage', 0.001)
+                )
+            
+            # Split data if not provided
+            if train_data is None or test_data is None:
+                train_size = int(len(data) * 0.7)
+                train_data = data.iloc[:train_size]
+                test_data = data.iloc[train_size:]
+            
+            # Train model
+            super().train(train_data)
+            
+            # Generate signals
+            signals, predictions = self.predict(test_data)
+            
+            # Fix date ambiguity again if needed
+            if isinstance(signals, pd.DataFrame):
+                if signals.index.name == 'date' and 'date' in signals.columns:
+                    signals = signals.reset_index(drop=True)
+                elif signals.index.name == 'date' and 'date' not in signals.columns:
+                    signals = signals.reset_index()
+            
+            # Create a dictionary with test data (for backtesting)
+            symbol = self.config.get('symbol', 'SPY')
+            test_data_dict = {symbol: test_data}
+            
+            # Run backtest
+            results = self.backtest_engine.run_backtest(signals, test_data_dict)
+            
+            # Store metrics
+            self.metrics.update(results.get('performance', {}))
+            
+            return results
     
     def _add_regime_analysis(self, results, test_data):
         """

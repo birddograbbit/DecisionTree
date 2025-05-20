@@ -12,6 +12,7 @@ from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.preprocessing import StandardScaler
 import optuna
 from optuna.samplers import TPESampler
+import config
 
 def optimize_decision_tree(X, y, n_trials=100, n_splits=5, random_state=42):
     """
@@ -403,7 +404,7 @@ def optimize_hyperparameters(model_type, X, y, n_trials=100, n_splits=5, random_
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
 
-def save_hyperparameters(params, model_type, path='data/hyperparameters'):
+def save_hyperparameters(params, model_type, path=config.HYPERPARAMS_DIR):
     """
     Save hyperparameters to disk.
     
@@ -414,7 +415,7 @@ def save_hyperparameters(params, model_type, path='data/hyperparameters'):
     model_type : str
         Model type ('decision_tree', 'random_forest', 'xgboost')
     path : str
-        Path to save hyperparameters (default: 'data/hyperparameters')
+        Path to save hyperparameters (default: config.HYPERPARAMS_DIR)
     """
     # Create directory if it doesn't exist
     os.makedirs(path, exist_ok=True)
@@ -428,7 +429,7 @@ def save_hyperparameters(params, model_type, path='data/hyperparameters'):
     
     print(f"Hyperparameters saved to {filename}")
 
-def load_hyperparameters(model_type, path='data/hyperparameters'):
+def load_hyperparameters(model_type, path=config.HYPERPARAMS_DIR):
     """
     Load hyperparameters from disk.
     
@@ -437,7 +438,7 @@ def load_hyperparameters(model_type, path='data/hyperparameters'):
     model_type : str
         Model type ('decision_tree', 'random_forest', 'xgboost')
     path : str
-        Path to load hyperparameters from (default: 'data/hyperparameters')
+        Path to load hyperparameters from (default: config.HYPERPARAMS_DIR)
         
     Returns:
     --------

@@ -292,7 +292,7 @@ def parse_arguments():
                         default='all',
                         help='Model type to optimize (default: all)')
     
-    parser.add_argument('--output', type=str, default='data/hyperparameters',
+    parser.add_argument('--output', type=str, default=config.HYPERPARAMS_DIR,
                         help='Directory to save optimized hyperparameters')
     
     parser.add_argument('--trials', type=int, default=None,

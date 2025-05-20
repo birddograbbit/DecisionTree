@@ -34,6 +34,11 @@ OPTUNA_TRIALS = 100  # Number of trials for hyperparameter optimization
 TIMESERIES_CV_SPLITS = 5  # Number of splits for time series cross-validation
 RANDOM_STATE = 42  # Random seed for reproducibility
 
+# Paths for storing optimized hyperparameters
+HYPERPARAMS_DIR = 'data/hyperparameters'
+HYPERPARAMS_VERSIONED_DIR = f"{HYPERPARAMS_DIR}/versioned"
+HYPERPARAMS_REGIME_DIR = f"{HYPERPARAMS_DIR}/regimes"
+
 # Hyperparameter search spaces
 DECISION_TREE_PARAMS = {
     'max_depth': (2, 20),  # Min and max values for max_depth

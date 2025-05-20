@@ -232,24 +232,67 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
                     X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
                     y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
                     
-                    # Import from src
-                    from src.models.xgboost_model import XGBoostModel
-                    from sklearn.pipeline import make_pipeline
-                    from sklearn.preprocessing import StandardScaler
+                    # Use the standard XGBClassifier directly instead of our custom model
+                    # This ensures compatibility with scikit-learn's pipelines
+                    model_params = {
+                        'n_estimators': params['n_estimators'],
+                        'max_depth': params['max_depth'],
+                        'learning_rate': params['learning_rate'],
+                        'subsample': params['subsample'],
+                        'colsample_bytree': params['colsample_bytree'],
+                        'gamma': params['gamma'],
+                        'min_child_weight': params['min_child_weight'],
+                        'reg_alpha': params['reg_alpha'],
+                        'reg_lambda': params['reg_lambda'],
+                        'scale_pos_weight': params['scale_pos_weight'],
+                        'random_state': random_state,
+                        'n_jobs': -1
+                    }
                     
-                    # Create a dedicated XGBoostModel with current trial parameters
-                    custom_model = XGBoostModel(**params)
+                    # Handle class weight or focal loss
+                    if use_focal_loss:
+                        # For focal loss, we still need to use XGBClassifier
+                        # We'll implement the focal loss through the objective later
+                        pass
+                    else:
+                        if class_weight == 'balanced':
+                            # Calculate balanced class weights
+                            class_counts = np.bincount(y_train)
+                            total_samples = len(y_train)
+                            weight_for_0 = total_samples / (2 * class_counts[0])
+                            weight_for_1 = total_samples / (2 * class_counts[1])
+                            
+                            # Set sample weights
+                            sample_weights = np.ones(len(y_train))
+                            sample_weights[y_train == 0] = weight_for_0
+                            sample_weights[y_train == 1] = weight_for_1
+                        elif isinstance(class_weight, dict):
+                            # Convert class weight dictionary to sample weights
+                            sample_weights = np.ones(len(y_train))
+                            for class_val, weight in class_weight.items():
+                                sample_weights[y_train == class_val] = weight
+                        else:
+                            sample_weights = None
                     
-                    # Create a proper pipeline for each fold and explicitly fit it
-                    pipeline = make_pipeline(StandardScaler(), custom_model)
-                    pipeline.fit(X_train, y_train)
+                    # Create model
+                    xgb_model = xgb.XGBClassifier(**model_params)
                     
-                    # Use the pipeline for prediction
-                    y_pred = pipeline.predict_proba(X_test)[:, 1]  # Get probabilities for positive class
-                    y_pred_binary = (y_pred > 0.5).astype(int)
+                    # Create and fit pipeline
+                    pipeline = make_pipeline(StandardScaler(), xgb_model)
+                    
+                    if sample_weights is not None:
+                        pipeline.fit(X_train, y_train, xgbclassifier__sample_weight=sample_weights)
+                    else:
+                        pipeline.fit(X_train, y_train)
+                    
+                    # Predict probabilities
+                    y_pred_proba = pipeline.predict_proba(X_test)
+                    
+                    # Convert to binary predictions using threshold 0.5
+                    y_pred = (y_pred_proba[:, 1] > 0.5).astype(int)
                     
                     # Calculate accuracy
-                    score = (y_pred_binary == y_test).mean()
+                    score = (y_pred == y_test).mean()
                     scores.append(score)
                 
                 return np.mean(scores)

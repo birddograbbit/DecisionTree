@@ -13,6 +13,7 @@ from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.preprocessing import StandardScaler
 import optuna
 from optuna.samplers import TPESampler
+import config
 
 def optimize_decision_tree(X, y, n_trials=100, n_splits=5, random_state=42):
     """
@@ -415,7 +416,7 @@ def save_hyperparameters(params, model_type, path=config.HYPERPARAMS_DIR):
     model_type : str
         Model type ('decision_tree', 'random_forest', 'xgboost')
     path : str
-        Path to save hyperparameters (default: 'data/hyperparameters')
+        Path to save hyperparameters (default: config.HYPERPARAMS_DIR)
     """
     # Create directory if it doesn't exist
     os.makedirs(path, exist_ok=True)
@@ -438,7 +439,7 @@ def load_hyperparameters(model_type, path=config.HYPERPARAMS_DIR):
     model_type : str
         Model type ('decision_tree', 'random_forest', 'xgboost')
     path : str
-        Path to load hyperparameters from (default: 'data/hyperparameters')
+        Path to load hyperparameters from (default: config.HYPERPARAMS_DIR)
         
     Returns:
     --------

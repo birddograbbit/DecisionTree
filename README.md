@@ -29,3 +29,8 @@ python tests/test_focal_loss.py
 ```
 
 See the [Decision Tree Classifier Strategy](Decision_Tree_Classifier_Strategy.md) for full documentation. The [v0.2 roadmap](v0.2_roadmap.md) describes planned improvements for the next release.
+
+To audit features using permutation importance:
+```bash
+python run_feature_audit.py --data data/raw/historical_data_STOCK_SPY_1_day2010-2025.csv --model random_forest --output results/audit
+```

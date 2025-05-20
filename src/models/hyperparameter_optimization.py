@@ -8,6 +8,7 @@ import os
 import pickle
 import numpy as np
 import pandas as pd
+import config
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.preprocessing import StandardScaler
 import optuna

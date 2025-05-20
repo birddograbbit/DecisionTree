@@ -8,6 +8,7 @@ import os
 import pickle
 import numpy as np
 import pandas as pd
+import config
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.preprocessing import StandardScaler
 import optuna
@@ -403,7 +404,7 @@ def optimize_hyperparameters(model_type, X, y, n_trials=100, n_splits=5, random_
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
 
-def save_hyperparameters(params, model_type, path='data/hyperparameters'):
+def save_hyperparameters(params, model_type, path=config.HYPERPARAMS_DIR):
     """
     Save hyperparameters to disk.
     
@@ -428,7 +429,7 @@ def save_hyperparameters(params, model_type, path='data/hyperparameters'):
     
     print(f"Hyperparameters saved to {filename}")
 
-def load_hyperparameters(model_type, path='data/hyperparameters'):
+def load_hyperparameters(model_type, path=config.HYPERPARAMS_DIR):
     """
     Load hyperparameters from disk.
     

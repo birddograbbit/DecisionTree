@@ -15,9 +15,10 @@ except ImportError:
     print("To install XGBoost: pip install xgboost")
 
 from .base_model import BaseModel
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import make_pipeline, Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.calibration import CalibratedClassifierCV
 
 class ModelAdapter(BaseEstimator, ClassifierMixin):
     """
@@ -457,17 +458,36 @@ class XGBoostModel(BaseModel, BaseEstimator, ClassifierMixin):
         dict or np.ndarray
             Feature importance scores
         """
+        # Determine the fitted estimator from the training pipeline
+        estimator = None
+        if isinstance(self._clf, Pipeline):
+            estimator = self._clf.steps[-1][1]
+        elif isinstance(self._clf, CalibratedClassifierCV):
+            if hasattr(self._clf, 'calibrated_classifiers_') and self._clf.calibrated_classifiers_:
+                base = self._clf.calibrated_classifiers_[0].estimator
+            else:
+                base = self._clf.estimator
+            if isinstance(base, Pipeline):
+                estimator = base.steps[-1][1]
+            else:
+                estimator = base
+        elif self._base is not None:
+            estimator = self._base
+
+        if estimator is None:
+            raise ValueError("Model has not been trained yet.")
+
         if self.feature_names is None:
             if self.use_focal_loss:
                 # Get importance for custom objective
-                return self._base.get_score(importance_type='gain')
+                return estimator.get_score(importance_type='gain')
             else:
                 # Standard importance
-                return self._base.feature_importances_
+                return estimator.feature_importances_
         else:
             if self.use_focal_loss:
                 # Get feature importance for custom objective
-                importances = self._base.get_score(importance_type='gain')
+                importances = estimator.get_score(importance_type='gain')
                 
                 # Convert feature index to feature names
                 named_importances = {}
@@ -486,7 +506,7 @@ class XGBoostModel(BaseModel, BaseEstimator, ClassifierMixin):
                 return named_importances
             else:
                 # Return dictionary mapping feature names to importance scores
-                return dict(zip(self.feature_names, self._base.feature_importances_))
+                return dict(zip(self.feature_names, estimator.feature_importances_))
 
     def save(self, path):
         """

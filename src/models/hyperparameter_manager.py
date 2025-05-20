@@ -373,7 +373,7 @@ class HyperparameterManager:
         
         for regime in unique_regimes:
             # Get indices for this regime
-            regime_indices = [idx for idx, r in regimes.items() if r == regime]
+            regime_indices = [idx for idx, r in regimes.items() if r == regime and idx < len(X)]
             
             # Skip if too few samples
             if len(regime_indices) < 100:  # Minimum samples threshold
@@ -382,7 +382,7 @@ class HyperparameterManager:
                 regime_models[regime] = self.create_optimized_model(model_type)
                 continue
             
-            # Extract data for this regime
+            # Extract data for this regime using positional indices
             X_regime = X.iloc[regime_indices]
             y_regime = y.iloc[regime_indices]
             

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import make_pipeline, Pipeline
 from sklearn.preprocessing import StandardScaler
 from .base_model import BaseModel
 
@@ -140,11 +140,32 @@ class RandomForestModel(BaseModel):
         dict or np.ndarray
             Feature importance scores
         """
+        # Determine the fitted estimator from the training pipeline
+        estimator = None
+        if isinstance(self._clf, Pipeline):
+            estimator = self._clf.steps[-1][1]
+        elif isinstance(self._clf, CalibratedClassifierCV):
+            if hasattr(self._clf, 'calibrated_classifiers_') and self._clf.calibrated_classifiers_:
+                base = self._clf.calibrated_classifiers_[0].estimator
+            else:
+                base = self._clf.estimator
+            if isinstance(base, Pipeline):
+                estimator = base.steps[-1][1]
+            else:
+                estimator = base
+        elif self._base is not None:
+            estimator = self._base
+
+        if estimator is None or not hasattr(estimator, "feature_importances_"):
+            raise ValueError("Model has not been trained yet or does not expose feature_importances_.")
+
+        importances = estimator.feature_importances_
+
         if self.feature_names is None:
-            return self._base.feature_importances_
+            return importances
         else:
             # Return dictionary mapping feature names to importance scores
-            return dict(zip(self.feature_names, self._base.feature_importances_))
+            return dict(zip(self.feature_names, importances))
 
     def save(self, path):
         """

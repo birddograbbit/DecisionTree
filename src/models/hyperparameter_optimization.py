@@ -2,6 +2,11 @@
 
 """
 Module for hyperparameter optimization using Optuna.
+
+This module provides optimization functions for different model types.
+For saving and loading hyperparameters, use HyperparameterManager from 
+src.models.hyperparameter_manager instead of the deprecated functions
+that were previously in this module.
 """
 
 import os
@@ -9,6 +14,7 @@ import pickle
 import numpy as np
 import pandas as pd
 import config
+import warnings
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.preprocessing import StandardScaler
 import optuna
@@ -167,6 +173,10 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
     """
     Optimize hyperparameters for XGBoost model using Optuna.
     
+    This function now properly mirrors the XGBoostModel behavior including
+    focal loss implementation and ModelAdapter usage to ensure optimization
+    results match production model performance.
+    
     Parameters:
     -----------
     X : pd.DataFrame
@@ -188,10 +198,10 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
     # Define the objective function for Optuna
     def objective(trial):
         try:
+            # Import required modules
             import xgboost as xgb
-            from sklearn.pipeline import make_pipeline
             from sklearn.preprocessing import StandardScaler
-            from sklearn.model_selection import cross_val_score
+            from .xgboost_model import XGBoostModel, FocalLoss, ModelAdapter
             
             # Define hyperparameters to optimize
             params = {
@@ -226,74 +236,41 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
                 params['use_focal_loss'] = False
                 params['class_weight'] = class_weight
             
-            # Create custom evaluation function for cross-validation
-            def custom_cv_score(estimator, X, y, cv):
-                # Create simple dataset splits
+            # Create custom evaluation function that mirrors XGBoostModel behavior
+            def custom_cv_score_with_model(X, y, cv):
                 scores = []
                 for train_idx, test_idx in cv.split(X):
                     X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
                     y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
                     
-                    # Use the standard XGBClassifier directly instead of our custom model
-                    # This ensures compatibility with scikit-learn's pipelines
-                    model_params = {
-                        'n_estimators': params['n_estimators'],
-                        'max_depth': params['max_depth'],
-                        'learning_rate': params['learning_rate'],
-                        'subsample': params['subsample'],
-                        'colsample_bytree': params['colsample_bytree'],
-                        'gamma': params['gamma'],
-                        'min_child_weight': params['min_child_weight'],
-                        'reg_alpha': params['reg_alpha'],
-                        'reg_lambda': params['reg_lambda'],
-                        'scale_pos_weight': params['scale_pos_weight'],
-                        'random_state': random_state,
-                        'n_jobs': -1
-                    }
+                    # Create XGBoostModel with suggested hyperparameters
+                    # This ensures we're testing the exact same model that will be used in production
+                    model = XGBoostModel(
+                        n_estimators=params['n_estimators'],
+                        max_depth=params['max_depth'],
+                        learning_rate=params['learning_rate'],
+                        subsample=params['subsample'],
+                        colsample_bytree=params['colsample_bytree'],
+                        gamma=params['gamma'],
+                        min_child_weight=params['min_child_weight'],
+                        reg_alpha=params['reg_alpha'],
+                        reg_lambda=params['reg_lambda'],
+                        scale_pos_weight=params['scale_pos_weight'],
+                        random_state=random_state,
+                        use_focal_loss=use_focal_loss,
+                        focal_gamma=focal_gamma if use_focal_loss else 2.0,
+                        focal_alpha=focal_alpha if use_focal_loss else 0.25,
+                        class_weight=class_weight
+                    )
                     
-                    # Always initialize sample_weights to None
-                    sample_weights = None
+                    # Train the model using the same method as in production
+                    model.train(X_train, y_train)
                     
-                    # Handle class weight or focal loss
-                    if use_focal_loss:
-                        # For focal loss, use scale_pos_weight parameter
-                        # This is a simplification since XGBoost doesn't directly support focal loss
-                        # But scale_pos_weight helps with class imbalance
-                        pass
-                    else:
-                        if class_weight == 'balanced':
-                            # Calculate balanced class weights
-                            class_counts = np.bincount(y_train)
-                            total_samples = len(y_train)
-                            weight_for_0 = total_samples / (2 * class_counts[0])
-                            weight_for_1 = total_samples / (2 * class_counts[1])
-                            
-                            # Set sample weights
-                            sample_weights = np.ones(len(y_train))
-                            sample_weights[y_train == 0] = weight_for_0
-                            sample_weights[y_train == 1] = weight_for_1
-                        elif isinstance(class_weight, dict):
-                            # Convert class weight dictionary to sample weights
-                            sample_weights = np.ones(len(y_train))
-                            for class_val, weight in class_weight.items():
-                                sample_weights[y_train == class_val] = weight
-                    
-                    # Create model
-                    xgb_model = xgb.XGBClassifier(**model_params)
-                    
-                    # Create and fit pipeline
-                    pipeline = make_pipeline(StandardScaler(), xgb_model)
-                    
-                    if sample_weights is not None:
-                        pipeline.fit(X_train, y_train, xgbclassifier__sample_weight=sample_weights)
-                    else:
-                        pipeline.fit(X_train, y_train)
-                    
-                    # Predict probabilities
-                    y_pred_proba = pipeline.predict_proba(X_test)
+                    # Get predictions using the same method as in production
+                    y_pred_proba = model.predict(X_test)
                     
                     # Convert to binary predictions using threshold 0.5
-                    y_pred = (y_pred_proba[:, 1] > 0.5).astype(int)
+                    y_pred = (y_pred_proba > 0.5).astype(int)
                     
                     # Calculate accuracy
                     score = (y_pred == y_test).mean()
@@ -304,18 +281,19 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
             # Use TimeSeriesSplit for cross-validation
             tscv = TimeSeriesSplit(n_splits=n_splits)
             
-            # Perform custom cross-validation
-            score = custom_cv_score(None, X, y, tscv)
+            # Perform custom cross-validation using the actual XGBoostModel
+            score = custom_cv_score_with_model(X, y, tscv)
             
             # Return the mean score
             return score
             
-        except ImportError:
+        except ImportError as e:
             # If XGBoost is not available, return a bad score
+            print(f"Import error in XGBoost optimization: {e}")
             return 0.0
         except Exception as e:
             # Log any errors for debugging
-            print(f"Error in optimization: {e}")
+            print(f"Error in XGBoost optimization: {e}")
             return 0.0
     
     # Create study with TPE sampler
@@ -405,9 +383,18 @@ def optimize_hyperparameters(model_type, X, y, n_trials=100, n_splits=5, random_
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
 
+# DEPRECATED FUNCTIONS - Use HyperparameterManager instead
+# =========================================================
+
 def save_hyperparameters(params, model_type, path=config.HYPERPARAMS_DIR):
     """
-    Save hyperparameters to disk.
+    DEPRECATED: Save hyperparameters to disk.
+    
+    This function is deprecated. Use HyperparameterManager.save_params() instead:
+    
+    from src.models.hyperparameter_manager import HyperparameterManager
+    manager = HyperparameterManager()
+    manager.save_params(params, model_type)
     
     Parameters:
     -----------
@@ -418,21 +405,30 @@ def save_hyperparameters(params, model_type, path=config.HYPERPARAMS_DIR):
     path : str
         Path to save hyperparameters (default: config.HYPERPARAMS_DIR)
     """
-    # Create directory if it doesn't exist
+    warnings.warn(
+        "save_hyperparameters() is deprecated. Use HyperparameterManager.save_params() instead. "
+        "Import with: from src.models.hyperparameter_manager import HyperparameterManager",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
+    # Fallback to basic functionality for backward compatibility
     os.makedirs(path, exist_ok=True)
-    
-    # Create filename
     filename = os.path.join(path, f'{model_type}_hyperparameters.pkl')
-    
-    # Save hyperparameters
     with open(filename, 'wb') as f:
         pickle.dump(params, f)
-    
     print(f"Hyperparameters saved to {filename}")
+    print("WARNING: Consider migrating to HyperparameterManager for better functionality")
 
 def load_hyperparameters(model_type, path=config.HYPERPARAMS_DIR):
     """
-    Load hyperparameters from disk.
+    DEPRECATED: Load hyperparameters from disk.
+    
+    This function is deprecated. Use HyperparameterManager.get_best_params() instead:
+    
+    from src.models.hyperparameter_manager import HyperparameterManager
+    manager = HyperparameterManager()
+    params = manager.get_best_params(model_type)
     
     Parameters:
     -----------
@@ -446,15 +442,18 @@ def load_hyperparameters(model_type, path=config.HYPERPARAMS_DIR):
     dict
         Hyperparameters
     """
-    # Create filename
-    filename = os.path.join(path, f'{model_type}_hyperparameters.pkl')
+    warnings.warn(
+        "load_hyperparameters() is deprecated. Use HyperparameterManager.get_best_params() instead. "
+        "Import with: from src.models.hyperparameter_manager import HyperparameterManager",
+        DeprecationWarning,
+        stacklevel=2
+    )
     
-    # Check if file exists
+    # Fallback to basic functionality for backward compatibility
+    filename = os.path.join(path, f'{model_type}_hyperparameters.pkl')
     if not os.path.exists(filename):
         raise FileNotFoundError(f"Hyperparameters file not found: {filename}")
-    
-    # Load hyperparameters
     with open(filename, 'rb') as f:
         params = pickle.load(f)
-    
+    print("WARNING: Consider migrating to HyperparameterManager for better functionality")
     return params

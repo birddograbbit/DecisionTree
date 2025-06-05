@@ -6,6 +6,7 @@ This script provides functionality to:
 1. Run a single strategy with specific parameters
 2. Compare multiple strategies or configurations
 3. Visualize and save results
+4. Perform feature auditing and pruning
 """
 
 import os
@@ -20,7 +21,14 @@ from src.strategies.trend_following import TrendFollowingStrategy
 from src.strategies.regime_adaptive_strategy import RegimeAdaptiveStrategy
 from src.models.model_factory import ModelFactory
 from src.models.hyperparameter_manager import HyperparameterManager
+from src.features.feature_engineering import (
+    prepare_train_test_data,
+    audit_features,
+    prune_features,
+    check_collinearity
+)
 from strategy_configs import STRATEGY_CONFIGS
+import config
 
 def load_data(data_path, symbol='SPY'):
     """
@@ -68,8 +76,155 @@ def load_data(data_path, symbol='SPY'):
     
     return df
 
+def run_feature_audit(data_path, output_dir, model_type='random_forest', 
+                     top_n_features=None, audit_only=False, symbol='SPY'):
+    """
+    Run feature importance audit on the data.
+    
+    Parameters:
+    -----------
+    data_path : str
+        Path to the historical data file or directory
+    output_dir : str
+        Directory to save audit results
+    model_type : str, default='random_forest'
+        Model type to use for feature importance evaluation
+    top_n_features : int, optional
+        Number of top features to keep (default from config)
+    audit_only : bool, default=False
+        If True, only perform audit without affecting main workflow
+    symbol : str, default='SPY'
+        Trading symbol
+        
+    Returns:
+    --------
+    tuple
+        (top_features_list, feature_audit_results) if audit_only,
+        otherwise (X_train_pruned, X_test_pruned, y_train, y_test, audit_results)
+    """
+    # Create audit output directory
+    audit_dir = os.path.join(output_dir, 'feature_audit')
+    os.makedirs(audit_dir, exist_ok=True)
+    
+    print(f"\n=== Running Feature Audit with {model_type} ===")
+    
+    # Load and prepare data
+    df = load_data(data_path, symbol=symbol)
+    
+    # Use config default if not specified
+    if top_n_features is None:
+        top_n_features = config.TOP_N_FEATURES
+    
+    # Prepare training and testing data without feature pruning
+    X_train, X_test, y_train, y_test, dates_train, dates_test, scaler = prepare_train_test_data(
+        df, train_end_date=None, prune_features_flag=False
+    )
+    
+    print(f"Original feature count: {X_train.shape[1]}")
+    print(f"Features: {list(X_train.columns)}")
+    
+    # Check for collinearity
+    print("\n--- Checking for Feature Collinearity ---")
+    correlated_pairs = check_collinearity(X_train, threshold=config.COLLINEARITY_THRESHOLD)
+    if correlated_pairs:
+        print(f"Found {len(correlated_pairs)} highly correlated feature pairs:")
+        for feat1, feat2, corr in correlated_pairs:
+            print(f"  {feat1} and {feat2}: {corr:.3f}")
+        
+        # Save collinearity results
+        with open(os.path.join(audit_dir, 'collinearity_analysis.txt'), 'w') as f:
+            f.write("Highly Correlated Feature Pairs:\n")
+            f.write(f"Threshold: {config.COLLINEARITY_THRESHOLD}\n\n")
+            for feat1, feat2, corr in correlated_pairs:
+                f.write(f"{feat1} and {feat2}: {corr:.3f}\n")
+    else:
+        print("No highly correlated features found.")
+    
+    # Train model for feature importance analysis
+    print(f"\n--- Training {model_type} for Feature Importance ---")
+    model = ModelFactory.create_model(model_type)
+    model.train(X_train, y_train)
+    
+    # Perform feature audit
+    print(f"--- Running Permutation Importance Analysis ---")
+    train_imp, test_imp, top_features = audit_features(
+        model,
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        n_repeats=config.FEATURE_AUDIT_N_REPEATS,
+        n_top_features=top_n_features,
+        random_state=config.RANDOM_STATE
+    )
+    
+    print(f"\nTop {len(top_features)} features selected:")
+    for i, feature in enumerate(top_features, 1):
+        importance = test_imp[test_imp['feature'] == feature]['importance_mean'].iloc[0]
+        print(f"  {i:2d}. {feature}: {importance:.4f}")
+    
+    # Save audit results
+    train_imp.to_csv(os.path.join(audit_dir, 'train_importance.csv'), index=False)
+    test_imp.to_csv(os.path.join(audit_dir, 'test_importance.csv'), index=False)
+    
+    with open(os.path.join(audit_dir, 'top_features.txt'), 'w') as f:
+        for feature in top_features:
+            f.write(f"{feature}\n")
+    
+    # Create feature importance plot
+    plt.figure(figsize=(12, 8))
+    
+    # Plot top features from test set
+    top_importance = test_imp.head(top_n_features)
+    plt.barh(range(len(top_importance)), top_importance['importance_mean'], 
+             yerr=top_importance['importance_std'], color='skyblue', alpha=0.7)
+    plt.yticks(range(len(top_importance)), top_importance['feature'])
+    plt.xlabel('Permutation Importance (Mean ± Std)')
+    plt.title(f'Top {top_n_features} Feature Importance ({model_type})')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(audit_dir, 'feature_importance.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Save audit summary
+    with open(os.path.join(audit_dir, 'audit_summary.txt'), 'w') as f:
+        f.write(f"Feature Audit Summary\n")
+        f.write(f"====================\n\n")
+        f.write(f"Model Used: {model_type}\n")
+        f.write(f"Original Features: {X_train.shape[1]}\n")
+        f.write(f"Selected Features: {len(top_features)}\n")
+        f.write(f"Reduction: {(1 - len(top_features) / X_train.shape[1]) * 100:.1f}%\n\n")
+        f.write(f"Top {len(top_features)} Features:\n")
+        for i, feature in enumerate(top_features, 1):
+            importance = test_imp[test_imp['feature'] == feature]['importance_mean'].iloc[0]
+            f.write(f"{i:2d}. {feature}: {importance:.4f}\n")
+    
+    audit_results = {
+        'train_importance': train_imp,
+        'test_importance': test_imp,
+        'top_features': top_features,
+        'collinearity_pairs': correlated_pairs,
+        'original_feature_count': X_train.shape[1],
+        'selected_feature_count': len(top_features)
+    }
+    
+    if audit_only:
+        print(f"\nFeature audit completed. Results saved to {audit_dir}")
+        return top_features, audit_results
+    
+    # Prune features for main workflow
+    print(f"\n--- Pruning Features to Top {len(top_features)} ---")
+    X_train_pruned, X_test_pruned = prune_features(X_train, X_test, top_features)
+    
+    print(f"Features after pruning: {X_train_pruned.shape[1]}")
+    print(f"Pruned features: {list(X_train_pruned.columns)}")
+    
+    return X_train_pruned, X_test_pruned, y_train, y_test, audit_results
+
 def run_strategy_comparison(data_path, output_dir='results_comparison', 
-                           train_end_date=None, symbol='SPY', use_optimized_params=False):
+                           train_end_date=None, symbol='SPY', use_optimized_params=False,
+                           run_feature_audit_flag=False, audit_model='random_forest', 
+                           top_n_features=None):
     """
     Run comparison of different strategies/models.
     
@@ -86,6 +241,12 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         Trading symbol
     use_optimized_params : bool, default=False
         Whether to use optimized hyperparameters for models
+    run_feature_audit_flag : bool, default=False
+        Whether to perform feature auditing before running strategies
+    audit_model : str, default='random_forest'
+        Model type to use for feature importance evaluation
+    top_n_features : int, optional
+        Number of top features to keep after auditing
         
     Returns:
     --------
@@ -94,6 +255,19 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
     """
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
+    
+    # Run feature audit if requested
+    if run_feature_audit_flag:
+        print("=== Feature Audit Phase ===")
+        top_features, audit_results = run_feature_audit(
+            data_path, output_dir, audit_model, top_n_features, audit_only=True, symbol=symbol
+        )
+        print(f"Feature audit completed. Selected {len(top_features)} features.")
+        
+        # Save audit results for reference
+        with open(os.path.join(output_dir, 'selected_features.txt'), 'w') as f:
+            for feature in top_features:
+                f.write(f"{feature}\n")
     
     # Load data
     df = load_data(data_path, symbol=symbol)
@@ -115,11 +289,15 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
     # Get strategy configurations
     strategy_configs = get_strategy_configs(use_optimized_params)
     
-    # Set symbol for all configs
+    # Set symbol for all configs and feature audit settings
     for config in strategy_configs:
         config['symbol'] = symbol
         if use_optimized_params:
             config['use_optimized'] = True
+        if run_feature_audit_flag:
+            config['use_feature_pruning'] = True
+            config['audit_model'] = audit_model
+            config['top_n_features'] = top_n_features or config.TOP_N_FEATURES
     
     # Run strategies
     results = {}
@@ -127,7 +305,7 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
     metrics_list = []
 
     for config in strategy_configs:
-        print(f"\nRunning strategy: {config['name']}")
+        print(f"\n=== Running strategy: {config['name']} ===")
 
         # Initialize strategy based on name
         if 'Regime Adaptive' in config['name']:
@@ -319,7 +497,9 @@ def get_strategy_configs(use_optimized_params=False):
 
 def run_single_strategy(data_path, model_type='random_forest', output_dir='results',
                        train_end_date=None, symbol='SPY', strategy_type='trend_following',
-                       calibrate=False, use_optimized_params=False):
+                       calibrate=False, use_optimized_params=False, 
+                       run_feature_audit_flag=False, audit_model='random_forest',
+                       top_n_features=None):
     """
     Run a single strategy with specified parameters.
     
@@ -342,6 +522,12 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         Whether to use probability calibration for Decision Tree and Random Forest models
     use_optimized_params : bool, default=False
         Whether to use optimized hyperparameters for models
+    run_feature_audit_flag : bool, default=False
+        Whether to perform feature auditing before running strategy
+    audit_model : str, default='random_forest'
+        Model type to use for feature importance evaluation
+    top_n_features : int, optional
+        Number of top features to keep after auditing
         
     Returns:
     --------
@@ -350,6 +536,14 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     """
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
+    
+    # Run feature audit if requested
+    if run_feature_audit_flag:
+        print("=== Feature Audit Phase ===")
+        top_features, audit_results = run_feature_audit(
+            data_path, output_dir, audit_model, top_n_features, audit_only=True, symbol=symbol
+        )
+        print(f"Feature audit completed. Selected {len(top_features)} features.")
     
     # Load data
     df = load_data(data_path, symbol=symbol)
@@ -402,7 +596,7 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
             config['use_calibration'] = True
             config['use_adaptive_thresholds'] = 'always'
     
-    # Set symbol
+    # Set symbol and feature audit settings
     config['symbol'] = symbol
     
     # Set optimized parameters flag
@@ -412,6 +606,12 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         # For regime-adaptive strategies, enable regime-specific hyperparameters
         if strategy_type == 'regime_adaptive':
             config['use_regime_specific_params'] = True
+    
+    # Set feature audit settings
+    if run_feature_audit_flag:
+        config['use_feature_pruning'] = True
+        config['audit_model'] = audit_model
+        config['top_n_features'] = top_n_features or config.TOP_N_FEATURES
     
     # Initialize and run strategy
     if strategy_type == 'regime_adaptive':
@@ -545,13 +745,13 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
 
 def parse_arguments():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description='Run trading strategies')
+    parser = argparse.ArgumentParser(description='Run trading strategies with optional feature auditing')
     
     parser.add_argument('--data', type=str, required=True,
                         help='Path to historical data file or directory')
     
-    parser.add_argument('--mode', type=str, choices=['single', 'compare'], default='single',
-                        help='Mode: single strategy or comparison (default: single)')
+    parser.add_argument('--mode', type=str, choices=['single', 'compare', 'audit'], default='single',
+                        help='Mode: single strategy, comparison, or feature audit only (default: single)')
     
     parser.add_argument('--model', type=str, choices=['decision_tree', 'random_forest', 'xgboost', 'stacking'],
                         default='random_forest',
@@ -580,6 +780,18 @@ def parse_arguments():
                         choices=['auto', 'always', 'never'], default='auto',
                         help='Adaptive threshold behavior (default: auto)')
     
+    # Feature auditing arguments
+    parser.add_argument('--feature-audit', action='store_true',
+                        help='Perform feature importance audit before running strategies')
+    
+    parser.add_argument('--audit-model', type=str, 
+                        choices=['decision_tree', 'random_forest', 'xgboost'], 
+                        default='random_forest',
+                        help='Model type for feature importance evaluation (default: random_forest)')
+    
+    parser.add_argument('--top-features', type=int, default=None,
+                        help=f'Number of top features to keep (default: {config.TOP_N_FEATURES})')
+    
     return parser.parse_args()
 
 def main():
@@ -587,7 +799,17 @@ def main():
     args = parse_arguments()
     
     # Run in specified mode
-    if args.mode == 'single':
+    if args.mode == 'audit':
+        # Run feature audit only
+        run_feature_audit(
+            data_path=args.data,
+            output_dir=args.output,
+            model_type=args.audit_model,
+            top_n_features=args.top_features,
+            audit_only=True,
+            symbol=args.symbol
+        )
+    elif args.mode == 'single':
         run_single_strategy(
             data_path=args.data,
             model_type=args.model,
@@ -596,7 +818,10 @@ def main():
             symbol=args.symbol,
             strategy_type=args.strategy,
             calibrate=args.calibrate,
-            use_optimized_params=args.use_optimized
+            use_optimized_params=args.use_optimized,
+            run_feature_audit_flag=args.feature_audit,
+            audit_model=args.audit_model,
+            top_n_features=args.top_features
         )
     else:  # compare mode
         run_strategy_comparison(
@@ -604,7 +829,10 @@ def main():
             output_dir=args.output,
             train_end_date=args.train_end,
             symbol=args.symbol,
-            use_optimized_params=args.use_optimized
+            use_optimized_params=args.use_optimized,
+            run_feature_audit_flag=args.feature_audit,
+            audit_model=args.audit_model,
+            top_n_features=args.top_features
         )
 
 if __name__ == "__main__":

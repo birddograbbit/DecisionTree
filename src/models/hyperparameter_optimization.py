@@ -173,9 +173,8 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
     """
     Optimize hyperparameters for XGBoost model using Optuna.
     
-    This function now properly mirrors the XGBoostModel behavior including
-    focal loss implementation and ModelAdapter usage to ensure optimization
-    results match production model performance.
+    This function now works with the simplified XGBoost implementation
+    that uses standard XGBClassifier without focal loss complexity.
     
     Parameters:
     -----------
@@ -199,11 +198,9 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
     def objective(trial):
         try:
             # Import required modules
-            import xgboost as xgb
-            from sklearn.preprocessing import StandardScaler
-            from .xgboost_model import XGBoostModel, FocalLoss, ModelAdapter
+            from ..models.xgboost_model import XGBoostModel
             
-            # Define hyperparameters to optimize
+            # Define hyperparameters to optimize (simplified - no focal loss)
             params = {
                 'n_estimators': trial.suggest_int('n_estimators', 50, 500),
                 'max_depth': trial.suggest_int('max_depth', 3, 12),
@@ -215,28 +212,10 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
                 'reg_alpha': trial.suggest_float('reg_alpha', 0, 5),
                 'reg_lambda': trial.suggest_float('reg_lambda', 0, 5),
                 'scale_pos_weight': trial.suggest_float('scale_pos_weight', 1, 10),
+                'class_weight': trial.suggest_categorical('class_weight', ['balanced', None])
             }
             
-            # Special case: Focal loss or class weights
-            use_focal_loss = trial.suggest_categorical('use_focal_loss', [True, False])
-            
-            if use_focal_loss:
-                focal_gamma = trial.suggest_float('focal_gamma', 0.5, 5.0)
-                focal_alpha = trial.suggest_float('focal_alpha', 0.1, 0.9)
-                class_weight = None
-                # Add focal loss parameters to the params
-                params['use_focal_loss'] = True
-                params['focal_gamma'] = focal_gamma
-                params['focal_alpha'] = focal_alpha
-            else:
-                focal_gamma = None
-                focal_alpha = None
-                class_weight = trial.suggest_categorical('class_weight', ['balanced', None])
-                # Add class weight to params
-                params['use_focal_loss'] = False
-                params['class_weight'] = class_weight
-            
-            # Create custom evaluation function that mirrors XGBoostModel behavior
+            # Create custom evaluation function using the simplified XGBoostModel
             def custom_cv_score_with_model(X, y, cv):
                 scores = []
                 for train_idx, test_idx in cv.split(X):
@@ -244,7 +223,6 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
                     y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
                     
                     # Create XGBoostModel with suggested hyperparameters
-                    # This ensures we're testing the exact same model that will be used in production
                     model = XGBoostModel(
                         n_estimators=params['n_estimators'],
                         max_depth=params['max_depth'],
@@ -257,10 +235,7 @@ def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
                         reg_lambda=params['reg_lambda'],
                         scale_pos_weight=params['scale_pos_weight'],
                         random_state=random_state,
-                        use_focal_loss=use_focal_loss,
-                        focal_gamma=focal_gamma if use_focal_loss else 2.0,
-                        focal_alpha=focal_alpha if use_focal_loss else 0.25,
-                        class_weight=class_weight
+                        class_weight=params['class_weight']
                     )
                     
                     # Train the model using the same method as in production

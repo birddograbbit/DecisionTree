@@ -4,7 +4,34 @@ Base strategy interface for trading strategies.
 
 from abc import ABC, abstractmethod
 import numpy as np
+import warnings
 from src.utils.threshold_manager import ThresholdManager
+
+# Backward compatibility constants (DEPRECATED)
+# These constants are deprecated as of v0.2 - use ThresholdManager instead
+BUY_THRESHOLD = 0.65
+SELL_THRESHOLD = 0.35
+
+def _threshold_deprecation_warning():
+    """Issue deprecation warning for legacy threshold constants."""
+    warnings.warn(
+        "BUY_THRESHOLD and SELL_THRESHOLD constants are deprecated. "
+        "Use ThresholdManager.get_thresholds() instead for adaptive threshold support.",
+        DeprecationWarning,
+        stacklevel=3
+    )
+
+# Issue warning when module is imported and constants are accessed
+# This is a bit of a hack, but necessary for backward compatibility
+import sys
+class DeprecatedConstantsModule(sys.modules[__name__].__class__):
+    def __getattribute__(self, name):
+        if name in ('BUY_THRESHOLD', 'SELL_THRESHOLD'):
+            _threshold_deprecation_warning()
+        return super().__getattribute__(name)
+
+# Replace the module with our custom class to catch attribute access
+sys.modules[__name__].__class__ = DeprecatedConstantsModule
 
 class BaseStrategy(ABC):
     """
@@ -49,7 +76,11 @@ class BaseStrategy(ABC):
         tuple
             (adjusted_buy_threshold, adjusted_sell_threshold)
         """
-        print("Warning: _adjust_thresholds_if_needed is deprecated. Use get_thresholds() instead.")
+        warnings.warn(
+            "_adjust_thresholds_if_needed is deprecated. Use get_thresholds() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         return self.get_thresholds(predictions)
     
     def get_thresholds(self, predictions=None):

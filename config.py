@@ -15,7 +15,8 @@ DATA_TEST_END_DATE = '20240510'  # Testing data end date
 
 # Model settings
 LOOKBACK_PERIOD = 10  # Number of days to look back for feature creation
-FEATURE_COUNT = 2  # Number of features to use (can be adjusted)
+# Note: FEATURE_COUNT removed as it was unused. Feature selection is now handled
+# through the feature auditing and pruning system in feature_engineering.py
 
 # Backtesting settings
 INITIAL_CAPITAL = 100000  # Initial capital for backtesting

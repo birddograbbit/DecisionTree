@@ -4,8 +4,7 @@ Signal engine for generating trading signals from model predictions.
 
 import pandas as pd
 import numpy as np
-from src.strategies.base_strategy import BUY_THRESHOLD, SELL_THRESHOLD
-from src.utils.adaptive_thresholds import are_adaptive_thresholds_needed, calculate_adaptive_thresholds
+from src.utils.threshold_manager import ThresholdManager
 
 class SignalEngine:
     """
@@ -15,7 +14,7 @@ class SignalEngine:
     trading signals, with various filtering and position sizing options.
     """
 
-    def __init__(self, position_sizing="confidence"):
+    def __init__(self, position_sizing="confidence", config=None):
         """
         Initialize the signal engine.
 
@@ -26,16 +25,19 @@ class SignalEngine:
             constant size of 1.0 whenever a non-zero signal is generated.
             ``'confidence'`` (default) scales size based on the distance of the
             probability from ``0.5`` using square-root weighting.
+        config : dict, optional
+            Configuration dictionary for threshold management
         """
-        # Global BUY_THRESHOLD and SELL_THRESHOLD apply for all engines.
         self.position_sizing = position_sizing
-        self.buy_threshold = BUY_THRESHOLD
-        self.sell_threshold = SELL_THRESHOLD
-        self.use_adaptive_thresholds = False
+        self.config = config or {}
+        self.threshold_manager = ThresholdManager(self.config)
         
     def check_for_adaptive_thresholds(self, predictions):
         """
         Check if adaptive thresholds should be used based on the prediction distribution.
+        
+        This method is deprecated - thresholds are now managed centrally.
+        Kept for backward compatibility.
         
         Parameters:
         -----------
@@ -47,16 +49,10 @@ class SignalEngine:
         tuple
             (should_use_adaptive, buy_threshold, sell_threshold)
         """
-        if are_adaptive_thresholds_needed(predictions):
-            self.use_adaptive_thresholds = True
-            buy_threshold, sell_threshold = calculate_adaptive_thresholds(predictions)
-            
-            # Log the adaptive thresholds
-            print(f"Using adaptive thresholds in SignalEngine: buy={buy_threshold:.4f}, sell={sell_threshold:.4f}")
-            
-            return True, buy_threshold, sell_threshold
-            
-        return False, self.buy_threshold, self.sell_threshold
+        print("Warning: check_for_adaptive_thresholds is deprecated. Thresholds are managed centrally.")
+        buy_threshold, sell_threshold = self.threshold_manager.get_thresholds(predictions)
+        use_adaptive = self.threshold_manager._should_use_adaptive_thresholds(predictions)
+        return use_adaptive, buy_threshold, sell_threshold
         
     def generate_signals(self, predictions, dates, symbol='SPY', custom_thresholds=None):
         """
@@ -82,31 +78,23 @@ class SignalEngine:
         if not isinstance(dates, (pd.Series, pd.DatetimeIndex)):
             dates = pd.Series(dates)
             
-        # Check if we should use adaptive thresholds
+        # Get thresholds from centralized manager
         if custom_thresholds:
             buy_threshold, sell_threshold = custom_thresholds
         else:
-            _, buy_threshold, sell_threshold = self.check_for_adaptive_thresholds(predictions)
+            buy_threshold, sell_threshold = self.threshold_manager.get_thresholds(predictions)
 
         # Create signals DataFrame
         signals = []
 
         for i, probability in enumerate(predictions):
             # Determine signal using thresholds
-            if probability >= buy_threshold:        # Buy signal
-                signal = 1
-            elif probability <= sell_threshold:     # Sell signal
-                signal = -1
-            else:                                   # Hold
-                signal = 0
+            signal = self.threshold_manager.prob_to_signal(probability, predictions)
 
-            # Determine position size
-            if self.position_sizing == "fixed":
-                position_size = 1.0 if signal != 0 else 0.0
-            else:  # confidence-based sizing
-                position_size = (abs(probability - 0.5) * 2) ** 0.5
-                if signal == 0:
-                    position_size = 0.0
+            # Determine position size using centralized logic
+            position_size = self.threshold_manager.get_position_size(probability, self.position_sizing)
+            if signal == 0:
+                position_size = 0.0
 
             signals.append({
                 'date': dates.iloc[i] if hasattr(dates, 'iloc') else dates[i],
@@ -203,13 +191,11 @@ class SignalEngine:
                     if holding_days >= max_holding_days:
                         # Force exit due to maximum holding period
                         filtered_signals.loc[i, 'signal'] = -1  # Force sell signal
-                        # Calculate position size for forced exit
-                        if self.position_sizing == "fixed":
-                            filtered_signals.loc[i, 'position_size'] = 1.0
-                        else:
-                            # Use current probability for position sizing, or default if forcing exit
-                            probability = filtered_signals.iloc[i]['probability']
-                            filtered_signals.loc[i, 'position_size'] = (abs(probability - 0.5) * 2) ** 0.5
+                        # Calculate position size for forced exit using centralized logic
+                        probability = filtered_signals.iloc[i]['probability']
+                        filtered_signals.loc[i, 'position_size'] = self.threshold_manager.get_position_size(
+                            probability, self.position_sizing
+                        )
                         
                         # Reset position tracking
                         position_start = None
@@ -352,3 +338,14 @@ class SignalEngine:
             })
         
         return pd.DataFrame(positions)
+
+    def get_threshold_configuration(self):
+        """
+        Get summary of current threshold configuration.
+        
+        Returns:
+        --------
+        dict
+            Threshold configuration summary
+        """
+        return self.threshold_manager.get_configuration_summary()

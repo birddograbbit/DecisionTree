@@ -325,6 +325,49 @@ if os.path.exists('stacking_analysis/'):
 
 ### Common Issues and Solutions
 
+#### Critical Issue: XGBoost Optimization Fails (Fixed as of 2025-06-05)
+**Symptoms:**
+```
+Import error in XGBoost optimization: cannot import name 'FocalLoss' from 'src.models.xgboost_model'
+[I 2025-06-05 10:58:26,451] Trial 0 finished with value: 0.0 and parameters: {}.
+```
+
+**Root Cause:** Incomplete fix implementation - hyperparameter optimization tried to import removed classes.
+
+**Solution:** ✅ **FIXED** - Updated `src/models/hyperparameter_optimization.py` to work with simplified XGBoost implementation.
+
+#### XGBoost Focal Loss Parameter Warnings
+**Symptoms:**
+```
+WARNING: /Users/runner/work/xgboost/xgboost/src/learner.cc:738: 
+Parameters: { "focal_alpha", "focal_gamma", "use_focal_loss" } are not used.
+```
+
+**Root Cause:** Configuration generates focal loss parameters but simplified XGBoost doesn't use them.
+
+**Solution:** These are warnings only and don't affect functionality. The optimization has been updated to remove these parameters.
+
+#### RegimeAdaptiveStrategy Date Ambiguity
+**Symptoms:**
+```
+ERROR - Error in generate_signals: 'date' is both an index level and a column label, which is ambiguous.
+```
+
+**Root Cause:** DataFrame has 'date' as both index and column name.
+
+**Solution:** 
+```python
+# For developers - ensure consistent date handling:
+if signals.index.name == 'date' and 'date' in signals.columns:
+    signals = signals.reset_index(drop=True)
+```
+
+The strategy code has multiple fixes for this, but if you encounter it:
+```bash
+# Workaround: Use TrendFollowing strategy instead
+python strategy_runner.py --data data/raw --strategy trend_following --model random_forest --output workaround_test
+```
+
 #### Data Loading Issues
 ```bash
 # Check data files
@@ -389,6 +432,13 @@ if os.path.exists('perf_test/performance.txt'):
 "
 ```
 
+### If You Encounter New Issues
+
+1. **Check the error logs** - All strategies log detailed error information
+2. **Try the TrendFollowing strategy** - It's more stable than RegimeAdaptive
+3. **Reduce complexity** - Use fewer trials for optimization, smaller datasets
+4. **Check the issue files** - See MEDIUM_PRIORITY_FIXES.md and LOW_PRIORITY_FIXES.md for known issues
+
 ## 📈 Expected Results Summary
 
 After running the complete testing suite, you should see:
@@ -419,6 +469,7 @@ The system should demonstrate:
 - **[v0.2 Roadmap](v0.2_roadmap.md)** - Development progress and future plans  
 - **[Test Plan](test_plan.md)** - Detailed automated testing procedures
 - **[Hyperparameter Optimization](hyperparameter_optimization.md)** - Optimization strategies
+- **[Priority Fixes](MEDIUM_PRIORITY_FIXES.md)** - Recent fixes and improvements
 
 ## 🎛️ Interactive Brokers Setup
 
@@ -430,4 +481,4 @@ For live trading (Phase 3), configure IBKR:
 
 ---
 
-**Note**: This is an active development project currently in Phase 1.5 of the v0.2 roadmap. All major components are functional and tested. For issues or contributions, see the development documentation in the main strategy file.
+**Note**: This is an active development project currently in Phase 1.5 of the v0.2 roadmap. Critical issues as of 2025-06-05 have been resolved. For issues or contributions, see the development documentation in the main strategy file.

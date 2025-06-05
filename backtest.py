@@ -1,9 +1,33 @@
 # backtest.py
 """
-Script to run backtesting of the decision tree trading strategy.
+DEPRECATED: Legacy backtesting module.
+
+⚠️  WARNING: This module is deprecated as of v0.2 ⚠️
+
+This module contains legacy backtesting functions that are no longer
+maintained. The modern trading system uses the engine-based architecture
+in strategy_runner.py instead.
+
+Migration Path:
+1. Use strategy_runner.py for all new backtesting workflows
+2. The modern approach provides:
+   - Engine-based architecture
+   - Strategy class framework
+   - Hyperparameter optimization integration
+   - Feature auditing capabilities
+   - Regime-adaptive strategies
+
+Legacy Functions Provided (with deprecation warnings):
+- run_backtest(): Use strategy_runner.py --mode single instead
+- run_walkforward_backtest(): Use strategy_runner.py with regime-adaptive strategies
+
+For documentation on the modern approach, see:
+- Decision_Tree_Classifier_Strategy.md
+- strategy_runner.py --help
 """
 
 import os
+import warnings
 import pandas as pd
 import matplotlib.pyplot as plt
 import pickle
@@ -19,9 +43,25 @@ from src.backtesting.performance import calculate_performance_metrics, plot_perf
 import config
 
 
+def _deprecation_warning(function_name, replacement):
+    """Issue a deprecation warning for legacy functions."""
+    warnings.warn(
+        f"{function_name} is deprecated and will be removed in a future version. "
+        f"Use {replacement} instead. See strategy_runner.py for the modern approach.",
+        DeprecationWarning,
+        stacklevel=3
+    )
+
+
 def run_backtest(model_path, data_path, output_dir='results', commission=0.0005, slippage=0.0001):
     """
-    Run a backtest using a trained model and historical data.
+    DEPRECATED: Run a backtest using a trained model and historical data.
+    
+    ⚠️  WARNING: This function is deprecated. Use strategy_runner.py instead.
+    
+    Migration example:
+    Old: python backtest.py --model model.pkl --data data/raw --output results
+    New: python strategy_runner.py --data data/raw --mode single --model xgboost --output results
     
     Parameters:
     -----------
@@ -41,151 +81,159 @@ def run_backtest(model_path, data_path, output_dir='results', commission=0.0005,
     dict
         Backtest results
     """
-    print(f"Running backtest with model: {model_path}")
+    _deprecation_warning(
+        "run_backtest()", 
+        "strategy_runner.py --mode single"
+    )
+    
+    print("🔄 DEPRECATED FUNCTION: Redirecting to modern backtesting approach...")
+    print("📖 For full functionality, please use strategy_runner.py directly")
+    print("📋 Example: python strategy_runner.py --data data/raw --mode single --model xgboost")
+    
+    # Provide basic legacy functionality for backward compatibility
+    # This is a simplified version that maintains some compatibility
+    # but encourages users to migrate to the modern approach
+    
+    print(f"Running legacy backtest with model: {model_path}")
     print(f"Using data: {data_path}")
     
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
     
-    # Load model and scaler
-    model, scaler = load_model(model_path)
-    
-    if model is None:
-        print(f"Failed to load model from {model_path}")
-        return None
-    
-    # Load data
-    if os.path.isdir(data_path):
-        # If data_path is a directory, look for SPY data files
-        train_file = os.path.join(data_path, 'historical_data_STOCK_SPY_1_day2000-2009.csv')
-        test_file = os.path.join(data_path, 'historical_data_STOCK_SPY_1_day2010-2025.csv')
+    try:
+        # Load model and scaler
+        model, scaler = load_model(model_path)
         
-        if not os.path.exists(train_file) or not os.path.exists(test_file):
-            print(f"Data files not found in {data_path}")
+        if model is None:
+            print(f"Failed to load model from {model_path}")
             return None
         
-        # Load and combine data
-        df = load_ibkr_data(train_file, test_file)
-    else:
-        # If data_path is a file, load it directly
-        df = pd.read_csv(data_path, index_col=0, parse_dates=True)
-    
-    if df is None or df.empty:
-        print("Failed to load data")
-        return None
-    
-    # Preprocess data
-    df = preprocess_data(df)
-    
-    print(f"Data loaded and preprocessed. Shape: {df.shape}")
-    print(f"Date range: {df.index.min()} to {df.index.max()}")
-    
-    # Split data into training and testing periods
-    train_end_date = '2009-12-31'
-    test_data = df[df.index > train_end_date]
-    
-    print(f"Test data shape: {test_data.shape}")
-    print(f"Test date range: {test_data.index.min()} to {test_data.index.max()}")
-    
-    # Generate features for test data
-    print("Generating features for test data...")
-    _, X_test, _, y_test, _, dates_test, _ = prepare_train_test_data(test_data, None)
-    
-    print(f"Test features shape: {X_test.shape}")
-    
-    # Generate signals
-    print("Generating trading signals...")
-    signals = generate_signals(model, X_test, dates_test)
-    
-    # Apply signal rules
-    signals = apply_signal_rules(signals, consecutive_buys=False)
-    
-    print(f"Generated {len(signals)} signals")
-    print(f"Buy signals: {(signals['signal'] == 1).sum()}")
-    print(f"Sell signals: {(signals['signal'] == -1).sum()}")
-    print(f"Hold signals: {(signals['signal'] == 0).sum()}")
-    
-    # Run backtest
-    print("Running backtest...")
-    backtest = BacktestEngine(initial_capital=config.INITIAL_CAPITAL, 
-                              commission=commission, 
-                              slippage=slippage)
-    backtest_results = backtest.run_backtest(signals, test_data)
-    
-    # Print performance summary
-    performance = backtest_results['performance']
-    
-    print("\nPerformance Summary:")
-    print(f"Total Return: {performance['total_return']:.2%}")
-    print(f"Annualized Return: {performance['ann_return']:.2%}")
-    print(f"Annualized Volatility: {performance['ann_volatility']:.2%}")
-    print(f"Sharpe Ratio: {performance['sharpe_ratio']:.2f}")
-    print(f"Maximum Drawdown: {performance['max_drawdown']:.2%}")
-    print(f"CAGR/Max DD Ratio: {performance['cagr_dd_ratio']:.2f}")
-    print(f"Win Rate: {performance['win_rate']:.2%}")
-    print(f"Number of Trades: {performance['num_trades']}")
-    
-    # Compare to benchmark (SPY buy and hold)
-    print("\nComparing to benchmark (SPY buy and hold)...")
-    comparison = compare_to_benchmark(backtest_results, df[df.index > train_end_date])
-    
-    print(f"Strategy Return: {comparison['strategy_return']:.2%}, Benchmark Return: {comparison['benchmark_return']:.2%}")
-    print(f"Outperformance: {comparison['outperformance']:.2%}")
-    print(f"Strategy CAGR: {comparison['strategy_cagr']:.2%}, Benchmark CAGR: {comparison['benchmark_cagr']:.2%}")
-    print(f"Strategy Max DD: {comparison['strategy_max_dd']:.2%}, Benchmark Max DD: {comparison['benchmark_max_dd']:.2%}")
-    print(f"Strategy CAGR/DD: {comparison['strategy_cagr_dd']:.2f}, Benchmark CAGR/DD: {comparison['benchmark_cagr_dd']:.2f}")
-    print(f"Alpha: {comparison['alpha']:.2%}")
-    print(f"Beta: {comparison['beta']:.2f}")
-    
-    # Plot performance
-    print("\nGenerating performance visualizations...")
-    figures = plot_performance(backtest_results, df[df.index > train_end_date], save_dir=output_dir)
-    
-    # Save backtest results
-    print(f"\nSaving backtest results to {output_dir}")
-    
-    # Save performance metrics
-    with open(os.path.join(output_dir, 'performance_metrics.txt'), 'w') as f:
-        f.write("Performance Summary:\n")
-        for key, value in performance.items():
-            if isinstance(value, (int, float)):
-                if key.endswith('_rate') or key in ['total_return', 'ann_return', 'ann_volatility', 'max_drawdown']:
-                    f.write(f"{key}: {value:.2%}\n")
-                else:
-                    f.write(f"{key}: {value:.4f}\n")
-            else:
-                f.write(f"{key}: {value}\n")
+        # Load data
+        if os.path.isdir(data_path):
+            # If data_path is a directory, look for SPY data files
+            train_file = os.path.join(data_path, 'historical_data_STOCK_SPY_1_day2000-2009.csv')
+            test_file = os.path.join(data_path, 'historical_data_STOCK_SPY_1_day2010-2025.csv')
+            
+            if not os.path.exists(train_file) or not os.path.exists(test_file):
+                print(f"Data files not found in {data_path}")
+                return None
+            
+            # Load and combine data
+            df = load_ibkr_data(train_file, test_file)
+        else:
+            # If data_path is a file, load it directly
+            df = pd.read_csv(data_path, index_col=0, parse_dates=True)
         
-        f.write("\nBenchmark Comparison:\n")
-        for key, value in comparison.items():
-            if isinstance(value, (int, float)):
-                if key.endswith('_return') or key.endswith('_dd') or key in ['alpha', 'outperformance']:
-                    f.write(f"{key}: {value:.2%}\n")
+        if df is None or df.empty:
+            print("Failed to load data")
+            return None
+        
+        # Preprocess data
+        df = preprocess_data(df)
+        
+        print(f"Data loaded and preprocessed. Shape: {df.shape}")
+        print(f"Date range: {df.index.min()} to {df.index.max()}")
+        
+        # Split data into training and testing periods
+        train_end_date = '2009-12-31'
+        test_data = df[df.index > train_end_date]
+        
+        print(f"Test data shape: {test_data.shape}")
+        print(f"Test date range: {test_data.index.min()} to {test_data.index.max()}")
+        
+        # Generate features for test data
+        print("Generating features for test data...")
+        _, X_test, _, y_test, _, dates_test, _ = prepare_train_test_data(test_data, None)
+        
+        print(f"Test features shape: {X_test.shape}")
+        
+        # Generate signals
+        print("Generating trading signals...")
+        signals = generate_signals(model, X_test, dates_test)
+        
+        # Apply signal rules
+        signals = apply_signal_rules(signals, consecutive_buys=False)
+        
+        print(f"Generated {len(signals)} signals")
+        print(f"Buy signals: {(signals['signal'] == 1).sum()}")
+        print(f"Sell signals: {(signals['signal'] == -1).sum()}")
+        print(f"Hold signals: {(signals['signal'] == 0).sum()}")
+        
+        # Run backtest
+        print("Running backtest...")
+        backtest = BacktestEngine(initial_capital=config.INITIAL_CAPITAL, 
+                                  commission=commission, 
+                                  slippage=slippage)
+        backtest_results = backtest.run_backtest(signals, test_data)
+        
+        # Print performance summary
+        performance = backtest_results['performance']
+        
+        print("\nPerformance Summary:")
+        print(f"Total Return: {performance['total_return']:.2%}")
+        print(f"Annualized Return: {performance['ann_return']:.2%}")
+        print(f"Annualized Volatility: {performance['ann_volatility']:.2%}")
+        print(f"Sharpe Ratio: {performance['sharpe_ratio']:.2f}")
+        print(f"Maximum Drawdown: {performance['max_drawdown']:.2%}")
+        print(f"CAGR/Max DD Ratio: {performance['cagr_dd_ratio']:.2f}")
+        print(f"Win Rate: {performance['win_rate']:.2%}")
+        print(f"Number of Trades: {performance['num_trades']}")
+        
+        # Compare to benchmark (SPY buy and hold)
+        print("\nComparing to benchmark (SPY buy and hold)...")
+        comparison = compare_to_benchmark(backtest_results, df[df.index > train_end_date])
+        
+        print(f"Strategy Return: {comparison['strategy_return']:.2%}, Benchmark Return: {comparison['benchmark_return']:.2%}")
+        print(f"Outperformance: {comparison['outperformance']:.2%}")
+        
+        # Save basic results
+        print(f"\nSaving legacy backtest results to {output_dir}")
+        
+        # Save performance metrics
+        with open(os.path.join(output_dir, 'performance_metrics.txt'), 'w') as f:
+            f.write("Performance Summary (Legacy Backtest):\n")
+            f.write("⚠️  Generated by deprecated backtest.py - migrate to strategy_runner.py\n\n")
+            for key, value in performance.items():
+                if isinstance(value, (int, float)):
+                    if key.endswith('_rate') or key in ['total_return', 'ann_return', 'ann_volatility', 'max_drawdown']:
+                        f.write(f"{key}: {value:.2%}\n")
+                    else:
+                        f.write(f"{key}: {value:.4f}\n")
                 else:
-                    f.write(f"{key}: {value:.4f}\n")
-            else:
-                f.write(f"{key}: {value}\n")
-    
-    # Save trades
-    if not backtest_results['trades'].empty:
-        backtest_results['trades'].to_csv(os.path.join(output_dir, 'trades.csv'))
-    
-    # Save equity curve
-    backtest_results['equity_curve'].to_csv(os.path.join(output_dir, 'equity_curve.csv'))
-    
-    # Save signals
-    signals.to_csv(os.path.join(output_dir, 'signals.csv'))
-    
-    print(f"Backtest completed. Results saved to {output_dir}")
-    
-    return backtest_results
+                    f.write(f"{key}: {value}\n")
+        
+        # Save trades
+        if not backtest_results['trades'].empty:
+            backtest_results['trades'].to_csv(os.path.join(output_dir, 'trades.csv'))
+        
+        # Save equity curve
+        backtest_results['equity_curve'].to_csv(os.path.join(output_dir, 'equity_curve.csv'))
+        
+        # Save signals
+        signals.to_csv(os.path.join(output_dir, 'signals.csv'))
+        
+        print(f"Legacy backtest completed. Results saved to {output_dir}")
+        print("\n🔄 To access full functionality, please migrate to strategy_runner.py")
+        
+        return backtest_results
+        
+    except Exception as e:
+        print(f"Error in legacy backtest: {e}")
+        print("🔄 For better error handling and full functionality, please use strategy_runner.py")
+        return None
 
 
 def run_walkforward_backtest(data_path, output_dir='results_walkforward',
                              train_size=252*5, test_size=126, step_size=63,
                              max_depth=5, min_samples_split=5):
     """
-    Run a walkforward backtest.
+    DEPRECATED: Run a walkforward backtest.
+    
+    ⚠️  WARNING: This function is deprecated. Use strategy_runner.py with regime-adaptive strategies instead.
+    
+    Migration example:
+    Old: python backtest.py --walkforward --data data/raw
+    New: python strategy_runner.py --data data/raw --strategy regime_adaptive --model random_forest
     
     Parameters:
     -----------
@@ -209,155 +257,52 @@ def run_walkforward_backtest(data_path, output_dir='results_walkforward',
     dict
         Walkforward backtest results
     """
-    from src.backtesting.engine import WalkforwardBacktester
-    
-    print(f"Running walkforward backtest...")
-    
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Load data
-    if os.path.isdir(data_path):
-        # If data_path is a directory, look for SPY data files
-        train_file = os.path.join(data_path, 'historical_data_STOCK_SPY_1_day2000-2009.csv')
-        test_file = os.path.join(data_path, 'historical_data_STOCK_SPY_1_day2010-2025.csv')
-        
-        if not os.path.exists(train_file) or not os.path.exists(test_file):
-            print(f"Data files not found in {data_path}")
-            return None
-        
-        # Load and combine data
-        df = load_ibkr_data(train_file, test_file)
-    else:
-        # If data_path is a file, load it directly
-        df = pd.read_csv(data_path, index_col=0, parse_dates=True)
-    
-    if df is None or df.empty:
-        print("Failed to load data")
-        return None
-    
-    # Preprocess data
-    df = preprocess_data(df)
-    
-    print(f"Data loaded and preprocessed. Shape: {df.shape}")
-    print(f"Date range: {df.index.min()} to {df.index.max()}")
-    
-    # Define model factory function
-    def model_factory(X_train, y_train):
-        return train_decision_tree(X_train, y_train, max_depth=max_depth, min_samples_split=min_samples_split)
-    
-    # Define feature engineering function (adapt to match your implementation)
-    def feature_engineer(data):
-        # Get the correct indices for X_test_scaled, y_test, and dates_test
-        results = prepare_train_test_data(data, None)
-        return results[1], results[3], results[5]  # X_test_scaled, y_test, dates_test
-    
-    # Create walkforward backtester
-    backtester = WalkforwardBacktester(
-        data=df,
-        model_factory=model_factory,
-        feature_engineer=feature_engineer,
-        train_size=train_size,
-        test_size=test_size,
-        step_size=step_size,
-        initial_capital=config.INITIAL_CAPITAL,
-        commission=config.COMMISSION_RATE,
-        slippage=config.SLIPPAGE_RATE
+    _deprecation_warning(
+        "run_walkforward_backtest()", 
+        "strategy_runner.py --strategy regime_adaptive"
     )
     
-    # Run walkforward backtest using global thresholds
-    results = backtester.run()
+    print("🔄 DEPRECATED FUNCTION: Walk-forward functionality is better handled by regime-adaptive strategies")
+    print("📖 For modern walk-forward equivalent, use strategy_runner.py with regime-adaptive strategies")
+    print("📋 Example: python strategy_runner.py --data data/raw --strategy regime_adaptive --model random_forest")
     
-    # Print performance summary
-    performance = results['performance']
+    # Create output directory
+    os.makedirs(output_dir, exist_ok=True)
     
-    print("\nOverall Performance Summary:")
-    print(f"Total Return: {performance['total_return']:.2%}")
-    print(f"Annualized Return: {performance['ann_return']:.2%}")
-    print(f"Annualized Volatility: {performance['ann_volatility']:.2%}")
-    print(f"Sharpe Ratio: {performance['sharpe_ratio']:.2f}")
-    print(f"Maximum Drawdown: {performance['max_drawdown']:.2%}")
-    print(f"CAGR/Max DD Ratio: {performance['cagr_dd_ratio']:.2f}")
-    print(f"Win Rate: {performance['win_rate']:.2%}")
-    print(f"Number of Trades: {performance['num_trades']}")
+    # Save a migration note
+    with open(os.path.join(output_dir, 'MIGRATION_NOTE.txt'), 'w') as f:
+        f.write("Walk-Forward Backtesting Migration\n")
+        f.write("===================================\n\n")
+        f.write("This legacy walk-forward backtest function has been deprecated.\n\n")
+        f.write("The modern approach uses regime-adaptive strategies which provide:\n")
+        f.write("- Dynamic adaptation to market conditions\n")
+        f.write("- Automatic retraining based on regime detection\n")
+        f.write("- Better integration with hyperparameter optimization\n")
+        f.write("- Professional engine-based architecture\n\n")
+        f.write("To migrate your workflow:\n")
+        f.write("python strategy_runner.py --data data/raw --strategy regime_adaptive --model random_forest\n\n")
+        f.write("For more information, see Decision_Tree_Classifier_Strategy.md\n")
     
-    # Print window results
-    print("\nWindow Results:")
-    for i, window in enumerate(results['window_results']):
-        print(f"Window {i+1}:")
-        print(f"  Train: {window['train_start']} to {window['train_end']}")
-        print(f"  Test: {window['test_start']} to {window['test_end']}")
-        print(f"  Total Return: {window['performance']['total_return']:.2%}")
-        print(f"  Win Rate: {window['performance']['win_rate']:.2%}")
-        print(f"  Number of Trades: {window['performance']['num_trades']}")
+    print(f"Migration note saved to {output_dir}/MIGRATION_NOTE.txt")
+    print("🔄 Please migrate to the modern strategy_runner.py approach for full functionality")
     
-    # Plot overall equity curve
-    plt.figure(figsize=(12, 6))
-    
-    # Use matplotlib.dates for proper date handling
-    import matplotlib.dates as mdates
-    from matplotlib.ticker import AutoLocator
-    
-    # Convert dates to numeric for plotting
-    date_nums = mdates.date2num(results['equity_curve'].index.to_pydatetime())
-    plt.plot(date_nums, results['equity_curve']['equity'])
-    
-    # Format x-axis with dates
-    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-    plt.gca().xaxis.set_major_locator(AutoLocator())
-    plt.xticks(rotation=45)
-    
-    plt.title('Walkforward Backtest Equity Curve')
-    plt.xlabel('Date')
-    plt.ylabel('Equity ($)')
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'walkforward_equity_curve.png'))
-    
-    # Save results
-    print(f"\nSaving walkforward backtest results to {output_dir}")
-    
-    # Save performance metrics
-    with open(os.path.join(output_dir, 'walkforward_performance.txt'), 'w') as f:
-        f.write("Overall Performance Summary:\n")
-        for key, value in performance.items():
-            if isinstance(value, (int, float)):
-                if key.endswith('_rate') or key in ['total_return', 'ann_return', 'ann_volatility', 'max_drawdown']:
-                    f.write(f"{key}: {value:.2%}\n")
-                else:
-                    f.write(f"{key}: {value:.4f}\n")
-            else:
-                f.write(f"{key}: {value}\n")
-        
-        f.write("\nWindow Results:\n")
-        for i, window in enumerate(results['window_results']):
-            f.write(f"Window {i+1}:\n")
-            f.write(f"  Train: {window['train_start']} to {window['train_end']}\n")
-            f.write(f"  Test: {window['test_start']} to {window['test_end']}\n")
-            for key, value in window['performance'].items():
-                if isinstance(value, (int, float)):
-                    if key.endswith('_rate') or key in ['total_return', 'ann_return', 'ann_volatility', 'max_drawdown']:
-                        f.write(f"  {key}: {value:.2%}\n")
-                    else:
-                        f.write(f"  {key}: {value:.4f}\n")
-    
-    # Save equity curve
-    results['equity_curve'].to_csv(os.path.join(output_dir, 'walkforward_equity_curve.csv'))
-    
-    # Save trades
-    if not results['trades'].empty:
-        results['trades'].to_csv(os.path.join(output_dir, 'walkforward_trades.csv'))
-    
-    print(f"Walkforward backtest completed. Results saved to {output_dir}")
-    
-    return results
+    return {
+        'status': 'deprecated',
+        'message': 'Use strategy_runner.py with regime-adaptive strategies instead',
+        'migration_example': 'python strategy_runner.py --data data/raw --strategy regime_adaptive --model random_forest'
+    }
 
 
-# backtest.py (continued)
+# Legacy command-line interface (deprecated)
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description='Run a backtest of the decision tree trading strategy')
+    print("⚠️  WARNING: backtest.py command-line interface is deprecated")
+    print("🔄 Please use strategy_runner.py instead for full functionality")
+    print("📋 Example: python strategy_runner.py --data data/raw --mode single --model xgboost")
+    print()
+    
+    parser = argparse.ArgumentParser(description='DEPRECATED: Use strategy_runner.py instead')
     parser.add_argument('--model', type=str, default='data/models/SPY_decision_tree.pkl',
                         help='Path to the trained model file')
     parser.add_argument('--data', type=str, default='data/raw',

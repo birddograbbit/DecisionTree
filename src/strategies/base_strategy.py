@@ -4,11 +4,7 @@ Base strategy interface for trading strategies.
 
 from abc import ABC, abstractmethod
 import numpy as np
-from src.utils.adaptive_thresholds import are_adaptive_thresholds_needed, calculate_adaptive_thresholds
-
-# Global constants for signal thresholds
-BUY_THRESHOLD = 0.65
-SELL_THRESHOLD = 0.35
+from src.utils.threshold_manager import ThresholdManager
 
 class BaseStrategy(ABC):
     """
@@ -20,14 +16,28 @@ class BaseStrategy(ABC):
 
     def __init__(self):
         """Initialize the strategy with default values."""
-        self.use_adaptive_thresholds = False
-        self.buy_threshold = BUY_THRESHOLD
-        self.sell_threshold = SELL_THRESHOLD
         self.config = None
+        self.threshold_manager = None
         
+    def _get_threshold_manager(self):
+        """
+        Get the threshold manager, creating it if necessary.
+        
+        Returns:
+        --------
+        ThresholdManager
+            Configured threshold manager
+        """
+        if self.threshold_manager is None:
+            self.threshold_manager = ThresholdManager(self.config)
+        return self.threshold_manager
+
     def _adjust_thresholds_if_needed(self, predictions):
         """
-        Check if adaptive thresholds are needed and adjust accordingly.
+        Get appropriate thresholds based on configuration and predictions.
+        
+        This method is deprecated - use get_thresholds() instead.
+        Kept for backward compatibility.
         
         Parameters:
         -----------
@@ -39,33 +49,26 @@ class BaseStrategy(ABC):
         tuple
             (adjusted_buy_threshold, adjusted_sell_threshold)
         """
-        # Check if custom thresholds are specified in config
-        if self.config and 'buy_threshold' in self.config and 'sell_threshold' in self.config:
-            return self.config['buy_threshold'], self.config['sell_threshold']
-            
-        # Check if we need adaptive thresholds
-        if are_adaptive_thresholds_needed(predictions):
-            self.use_adaptive_thresholds = True
-            buy_percentile = self.config.get('buy_percentile', 80) if self.config else 80
-            sell_percentile = self.config.get('sell_percentile', 20) if self.config else 20
-            
-            # Calculate adaptive thresholds
-            adaptive_buy, adaptive_sell = calculate_adaptive_thresholds(
-                predictions, 
-                buy_percentile=buy_percentile,
-                sell_percentile=sell_percentile
-            )
-            
-            # Log the adaptive thresholds
-            print(f"Using adaptive thresholds: buy={adaptive_buy:.4f}, sell={adaptive_sell:.4f}")
-            print(f"Prediction range: min={np.min(predictions):.4f}, max={np.max(predictions):.4f}")
-            
-            return adaptive_buy, adaptive_sell
+        print("Warning: _adjust_thresholds_if_needed is deprecated. Use get_thresholds() instead.")
+        return self.get_thresholds(predictions)
+    
+    def get_thresholds(self, predictions=None):
+        """
+        Get appropriate buy and sell thresholds.
         
-        # Use standard thresholds
-        return self.buy_threshold, self.sell_threshold
+        Parameters:
+        -----------
+        predictions : np.ndarray, optional
+            Model prediction probabilities
+        
+        Returns:
+        --------
+        tuple
+            (buy_threshold, sell_threshold)
+        """
+        return self._get_threshold_manager().get_thresholds(predictions)
 
-    def _prob_to_signal(self, prob, thresholds=None):
+    def _prob_to_signal(self, prob, predictions=None):
         """
         Convert probability to trading signal.
         
@@ -73,23 +76,17 @@ class BaseStrategy(ABC):
         -----------
         prob : float
             Model prediction probability
-        thresholds : tuple, optional
-            Custom (buy_threshold, sell_threshold) to use
+        predictions : np.ndarray, optional
+            All model predictions (used for adaptive threshold calculation)
             
         Returns:
         --------
         int
             Trading signal (1 for buy, -1 for sell, 0 for hold)
         """
-        buy_threshold, sell_threshold = thresholds if thresholds else (self.buy_threshold, self.sell_threshold)
-        
-        if prob >= buy_threshold:
-            return 1
-        elif prob <= sell_threshold:
-            return -1
-        return 0
+        return self._get_threshold_manager().prob_to_signal(prob, predictions)
 
-    def _size_from_prob(self, prob):
+    def _size_from_prob(self, prob, position_sizing='confidence'):
         """
         Calculate position size from probability.
         
@@ -97,14 +94,26 @@ class BaseStrategy(ABC):
         -----------
         prob : float
             Model prediction probability
+        position_sizing : str, optional
+            Position sizing method ('fixed' or 'confidence')
             
         Returns:
         --------
         float
             Position size (0-1 scale)
         """
-        # Use square-root weighting for smoother sizing
-        return (abs(prob - 0.5) * 2) ** 0.5
+        return self._get_threshold_manager().get_position_size(prob, position_sizing)
+
+    def get_threshold_configuration(self):
+        """
+        Get summary of current threshold configuration.
+        
+        Returns:
+        --------
+        dict
+            Threshold configuration summary
+        """
+        return self._get_threshold_manager().get_configuration_summary()
 
     @abstractmethod
     def initialize(self, config):
@@ -117,12 +126,8 @@ class BaseStrategy(ABC):
             Strategy configuration
         """
         self.config = config
-        
-        # Check for custom thresholds in config
-        if config and 'buy_threshold' in config:
-            self.buy_threshold = config['buy_threshold']
-        if config and 'sell_threshold' in config:
-            self.sell_threshold = config['sell_threshold']
+        # Reset threshold manager to pick up new config
+        self.threshold_manager = None
 
     @abstractmethod
     def generate_features(self, data):
@@ -160,12 +165,12 @@ class BaseStrategy(ABC):
         pd.DataFrame
             Trading signals
         """
-        # Check if we need adaptive thresholds before generating signals
-        adaptive_buy, adaptive_sell = self._adjust_thresholds_if_needed(predictions)
+        # Get thresholds for use in signal generation
+        buy_threshold, sell_threshold = self.get_thresholds(predictions)
         
-        # Store adaptive thresholds for later use
-        self.adaptive_buy_threshold = adaptive_buy
-        self.adaptive_sell_threshold = adaptive_sell
+        # Store thresholds for reference
+        self.current_buy_threshold = buy_threshold
+        self.current_sell_threshold = sell_threshold
 
     @abstractmethod
     def backtest(self, data, train_data=None, test_data=None):

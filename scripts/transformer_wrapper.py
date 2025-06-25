@@ -29,10 +29,11 @@ class TransformerModelWrapper:
     - Model persistence
     """
     
-    def __init__(self, seq_length=30, prediction_length=1, 
+    def __init__(self, seq_length=30, prediction_length=1,
                  n_features=9, d_model=64, n_heads=8, n_layers=2,
                  dropout=0.1, learning_rate=0.001, batch_size=32,
-                 epochs=20, device=None, **kwargs):
+                 epochs=20, device=None, target_column='close',
+                 preparator_strict=False, **kwargs):
         """
         Initialize the transformer wrapper.
         
@@ -60,6 +61,10 @@ class TransformerModelWrapper:
             Number of training epochs
         device : str or None
             Device to use ('cuda' or 'cpu')
+        target_column : str
+            Name of the target column for scaling
+        preparator_strict : bool
+            Whether SequencePreparator should enforce feature presence
         **kwargs : dict
             Additional arguments
         """
@@ -76,12 +81,15 @@ class TransformerModelWrapper:
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.epochs = epochs
-        
+
         # Device configuration
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
             self.device = torch.device(device)
+
+        self.target_column = target_column
+        self.preparator_strict = preparator_strict
             
         # Initialize model and components
         self.model = None
@@ -137,7 +145,8 @@ class TransformerModelWrapper:
             seq_length=self.seq_length,
             prediction_length=self.prediction_length,
             feature_columns=self.feature_columns,
-            target_column=self.feature_columns[-1]  # Assume last column is close price
+            target_column=self.target_column,
+            strict=self.preparator_strict
         )
         
         # Prepare sequences
@@ -216,7 +225,11 @@ class TransformerModelWrapper:
             X = pd.DataFrame(X, columns=self.feature_columns)
             
         # Prepare sequences
-        X_seq, _ = self.preparator.transform(X, include_targets=False)
+        try:
+            X_seq, _ = self.preparator.transform(X, include_targets=False)
+        except ValueError:
+            # Not enough data to create sequences
+            return np.full(len(X), 0.5)
         
         # Handle case where we don't have enough data for sequences
         if len(X_seq) == 0:

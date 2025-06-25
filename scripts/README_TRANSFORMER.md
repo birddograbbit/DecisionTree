@@ -43,8 +43,12 @@ This directory contains the transformer module implementation for integration wi
 ### 1. Install Dependencies
 
 ```bash
-pip install torch numpy pandas scikit-learn ta
+pip install -r scripts/requirements_transformer.txt
 ```
+
+Requires **Python 3.10+** and a compatible PyTorch build. Install the CPU or GPU
+version of PyTorch depending on your hardware. The `ta` library is optional but
+recommended.
 
 ### 2. Basic Usage
 
@@ -62,6 +66,7 @@ transformer = TransformerModelWrapper(
     n_features=9,
     d_model=64,
     n_heads=8,
+    target_column='close',
     epochs=20
 )
 
@@ -136,8 +141,20 @@ from scripts.hybrid_strategy import HybridTransformerStrategy
 
 class HybridMLStrategy(BaseStrategy, HybridTransformerStrategy):
     """Unified hybrid strategy for the system."""
-    pass
+
+    def __init__(self, dt_model, tf_model, regime_detector):
+        BaseStrategy.__init__(self)
+        HybridTransformerStrategy.__init__(
+            self,
+            dt_model=dt_model,
+            tf_model=tf_model,
+            regime_detector=regime_detector,
+        )
 ```
+
+Calling both parent constructors ensures attributes from `BaseStrategy` and
+`HybridTransformerStrategy` are initialized correctly when using multiple
+inheritance.
 
 ## Architecture Benefits
 
@@ -178,10 +195,10 @@ class HybridMLStrategy(BaseStrategy, HybridTransformerStrategy):
 
 ## Testing
 
-Run the integration test:
+Run the automated test suite:
 
 ```bash
-python scripts/test_transformer_integration.py
+pytest
 ```
 
 Expected output:

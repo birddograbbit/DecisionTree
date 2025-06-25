@@ -1,0 +1,20 @@
+# Transformer Integration Requirements
+# Add these to your existing requirements.txt
+
+# Core transformer dependencies
+torch>=2.0.0
+torchvision>=0.15.0  # Optional, for potential future vision features
+
+# Additional dependencies for transformer module
+ta>=0.11.0  # Technical analysis indicators (optional, has fallback)
+
+# Existing dependencies that should already be in main requirements.txt:
+# numpy
+# pandas
+# scikit-learn
+# matplotlib
+# seaborn
+
+# Optional but recommended for performance
+# torch-tb-profiler  # For profiling transformer performance
+# tensorboard  # For training visualization

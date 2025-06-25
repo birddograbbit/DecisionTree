@@ -10,6 +10,7 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 import torch
 from torch.utils.data import Dataset
+import logging
 
 
 class SequencePreparator:
@@ -22,8 +23,8 @@ class SequencePreparator:
     - Train/test splitting while maintaining temporal order
     """
     
-    def __init__(self, seq_length=30, prediction_length=1, 
-                 feature_columns=None, target_column='close'):
+    def __init__(self, seq_length=30, prediction_length=1,
+                 feature_columns=None, target_column='close', strict=False):
         """
         Initialize the sequence preparator.
         
@@ -37,11 +38,14 @@ class SequencePreparator:
             List of feature column names. If None, uses default features
         target_column : str
             Name of the target column
+        strict : bool
+            If True, raise ValueError when expected features are missing
         """
         self.seq_length = seq_length
         self.prediction_length = prediction_length
         self.feature_columns = feature_columns or self._get_default_features()
         self.target_column = target_column
+        self.strict = strict
         self.scaler = MinMaxScaler()
         self.is_fitted = False
         
@@ -63,9 +67,17 @@ class SequencePreparator:
         """
         # Select and validate features
         available_features = []
+        missing_features = []
         for col in self.feature_columns:
             if col in data.columns:
                 available_features.append(col)
+            else:
+                logging.warning("Feature column %s missing from data", col)
+                missing_features.append(col)
+
+        if missing_features and self.strict:
+            raise ValueError(
+                f"Missing required feature columns: {missing_features}")
                 
         if not available_features:
             raise ValueError("No valid feature columns found in data")
@@ -230,7 +242,8 @@ class StockSequenceDataset(Dataset):
             
 
 def prepare_data_for_transformer(data, seq_length=30, prediction_length=1,
-                                train_end_date=None, feature_columns=None):
+                                train_end_date=None, feature_columns=None,
+                                strict=False):
     """
     Convenience function to prepare data for transformer training.
     
@@ -246,6 +259,8 @@ def prepare_data_for_transformer(data, seq_length=30, prediction_length=1,
         End date for training data. If None, uses 80% for training
     feature_columns : list or None
         Feature columns to use
+    strict : bool
+        Whether to enforce presence of all features
         
     Returns:
     --------
@@ -272,7 +287,8 @@ def prepare_data_for_transformer(data, seq_length=30, prediction_length=1,
     preparator = SequencePreparator(
         seq_length=seq_length,
         prediction_length=prediction_length,
-        feature_columns=feature_columns
+        feature_columns=feature_columns,
+        strict=strict
     )
     
     # Prepare sequences

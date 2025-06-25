@@ -40,3 +40,23 @@ data/processed/
 data/models/*.pkl
 results/
 logs/
+
+archive/
+
+# temporary folders
+DecisionTree.code-workspace
+baseline_results/
+comparison_baseline/
+comparison_results/
+data/hyperparameters/
+date_test/
+feature_audit_test/
+feature_pruned_test/
+optimization_all_test/
+optimization_test/
+regime_strategy_test/
+results_walkforward/
+test_dt/
+test_rf/
+test_stackin/
+test_xgb/

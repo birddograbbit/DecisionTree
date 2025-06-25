@@ -62,7 +62,7 @@ class ModelFactory:
         Parameters:
         -----------
         model_type : str
-            Type of model to create ('decision_tree', 'random_forest', 'xgboost', 'stacking')
+            Type of model to create ('decision_tree', 'random_forest', 'xgboost', 'transformer', 'hybrid', 'stacking')
         params : dict
             Parameters to pass to the model constructor
             
@@ -117,6 +117,17 @@ class ModelFactory:
                 class_weight=class_weight,
                 **params
             )
+        elif model_type == 'transformer':
+            from .transformer.transformer_wrapper import TransformerModelWrapper
+            return TransformerModelWrapper(**params)
+
+        elif model_type == 'hybrid':
+            from .ensemble.hybrid_strategy import HybridMLStrategy
+            dt_params = params.pop("dt_params", {})
+            tf_params = params.pop("tf_params", {})
+            dt_model = ModelFactory.create_model("decision_tree", **dt_params)
+            tf_model = ModelFactory.create_model("transformer", **tf_params)
+            return HybridMLStrategy(dt_model, tf_model, **params)
         
         elif model_type == 'stacking':
             # Special handling for stacking model creation
@@ -204,7 +215,7 @@ class ModelFactory:
         list
             List of available model types
         """
-        models = ['decision_tree', 'random_forest', 'stacking']
+        models = ["decision_tree", "random_forest", "stacking", "transformer", "hybrid"]
         
         if XGBOOST_AVAILABLE:
             models.append('xgboost')
@@ -219,7 +230,7 @@ class ModelFactory:
         Parameters:
         -----------
         model_type : str
-            Type of model ('decision_tree', 'random_forest', 'xgboost', 'stacking')
+            Type of model ('decision_tree', 'random_forest', 'xgboost', 'transformer', 'hybrid', 'stacking')
             
         Returns:
         --------
@@ -274,6 +285,11 @@ class ModelFactory:
                 'class_weight': 'balanced'  # Added class weight
             }
         
+        elif model_type == "transformer":
+            return TRANSFORMER_CONFIG["default"]
+
+        elif model_type == "hybrid":
+            return HYBRID_CONFIG["balanced"]
         elif model_type == 'stacking':
             params = {
                 'base_models': [
@@ -313,7 +329,7 @@ class ModelFactory:
         Parameters:
         -----------
         model_type : str
-            Type of model to create ('decision_tree', 'random_forest', 'xgboost')
+            Type of model to create ('decision_tree', 'random_forest', 'xgboost', 'transformer', 'hybrid')
         X : pd.DataFrame or None
             Feature matrix (required if force_optimization=True)
         y : pd.Series or None

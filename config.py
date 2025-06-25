@@ -78,6 +78,28 @@ XGBOOST_PARAMS = {
     'class_weight': ['balanced', None]  # Options for class_weight
 }
 
+
+# Transformer and hybrid model configurations
+TRANSFORMER_CONFIG = {
+    'default': {
+        'seq_length': 30,
+        'prediction_length': 1,
+        'n_features': 9,
+        'd_model': 64,
+        'n_heads': 8,
+        'n_layers': 2,
+        'dropout': 0.1,
+        'epochs': 20,
+    }
+}
+
+HYBRID_CONFIG = {
+    'balanced': {
+        'dt_weight': 0.5,
+        'tf_weight': 0.5,
+        'regime_adaptive': True
+    }
+}
 # Feature audit settings
 FEATURE_AUDIT_N_REPEATS = 10  # Number of times to permute each feature
 TOP_N_FEATURES = 10  # Number of top features to keep after pruning

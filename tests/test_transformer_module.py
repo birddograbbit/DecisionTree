@@ -36,3 +36,4 @@ def test_non_strict_drops_missing_features():
     preparator = SequencePreparator(feature_columns=['open', 'high'], strict=False)
     preparator.fit(df)
     assert preparator.feature_columns == ['open']
+

@@ -30,3 +30,10 @@ def test_short_sequence_prediction_returns_neutral():
 
     preds = wrapper.predict(df)
     assert np.allclose(preds, 0.5)
+
+def test_non_strict_drops_missing_features():
+    df = pd.DataFrame({'open': [1, 2], 'close': [1, 2]})
+    preparator = SequencePreparator(feature_columns=['open', 'high'], strict=False)
+    preparator.fit(df)
+    assert preparator.feature_columns == ['open']
+

@@ -4,8 +4,8 @@ An advanced ensemble-based machine learning trading system for S&P 500 stocks wi
 
 ## 🎯 Project Overview
 
-### Current Status: Phase 1.5 (v0.2 Roadmap)
-The system has evolved into a sophisticated trading platform with the following **completed features**:
+### Current Status: Phase 2 (Integration in Progress)
+The system continues to evolve with transformer and hybrid models now integrated, with the following **completed features**:
 
 ✅ **Multi-Model Support**: Decision Tree, Random Forest, XGBoost, and Stacking ensembles  
 ✅ **Strategy Framework**: TrendFollowing and RegimeAdaptive strategies  

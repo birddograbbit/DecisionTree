@@ -1,6 +1,7 @@
 # Transformer Model API
 
 This document describes the API for the Transformer components integrated with the DecisionTree system.
+It includes updates completed during **Phase 2** of the integration project.
 
 ## Classes
 

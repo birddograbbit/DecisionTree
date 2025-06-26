@@ -1,6 +1,7 @@
 # Transformer Integration Guide
 
 This guide explains how to work with the transformer modules inside the DecisionTree project.
+It reflects progress made during **Phase 2** of the integration plan.
 
 1. **Install dependencies**
    ```bash

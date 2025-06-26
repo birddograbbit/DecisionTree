@@ -14,6 +14,23 @@ class GPUOptimizedTransformer:
         else:
             # CPU fallback - scaler won't actually scale
             self.scaler = None
+
+    def train_epoch(self, loader, optimizer):
+        """Train for a single epoch over a DataLoader."""
+        self.model.train()
+        epoch_loss = 0.0
+        for data, target in loader:
+            loss = self.train_step(data, target, optimizer)
+            epoch_loss += loss
+        return epoch_loss / len(loader)
+
+    def fit(self, loader, optimizer, epochs=1):
+        """Fit the model for a number of epochs."""
+        history = []
+        for _ in range(epochs):
+            epoch_loss = self.train_epoch(loader, optimizer)
+            history.append(epoch_loss)
+        return history
         
     def train_step(self, data, target, optimizer):
         data = data.to(self.device)

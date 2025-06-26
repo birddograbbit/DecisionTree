@@ -31,3 +31,21 @@ def test_dataset_len():
     X, y = sp.transform(df)
     ds = StockSequenceDataset(X, y)
     assert len(ds) == len(X)
+
+def test_various_sequence_lengths():
+    df = make_df(20)
+    for sl in [2,3,5]:
+        sp = SequencePreparator(seq_length=sl, prediction_length=1)
+        sp.fit(df)
+        X, y = sp.transform(df)
+        assert X.shape[1] == sl
+        assert len(X) == len(df) - sl - 1 + 1
+        assert y.shape[0] == len(X)
+
+
+def test_single_sample_edge_case():
+    df = make_df(3)
+    sp = SequencePreparator(seq_length=5)
+    with np.testing.assert_raises(ValueError):
+        sp.fit(df)
+        sp.transform(df)

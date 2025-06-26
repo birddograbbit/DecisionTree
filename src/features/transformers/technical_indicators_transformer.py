@@ -230,11 +230,11 @@ def _add_volume_features(df, window_sizes):
 
 def _handle_nan_values(df):
     """Handle NaN values in the dataframe."""
-    # Forward fill first
-    df = df.fillna(method='ffill')
+    # Forward fill first (using new pandas syntax)
+    df = df.ffill()
     
     # Then backward fill for any remaining NaNs at the beginning
-    df = df.fillna(method='bfill')
+    df = df.bfill()
     
     # If still NaN, fill with 0 (should be rare)
     df = df.fillna(0)

@@ -4,7 +4,7 @@ This guide walks you through installing dependencies and training your first tra
 
 1. **Install Requirements**
    ```bash
-   pip install -r requirements.txt
+   pip install -r requirements.txt -r requirements-testing.txt
    ```
 2. **Prepare Data**
    Place CSV files inside `data/raw/` with columns such as `open`, `high`, `low`, `close`, `volume`.

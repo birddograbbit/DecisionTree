@@ -4,7 +4,7 @@ This guide explains how to work with the transformer modules inside the Decision
 
 1. **Install dependencies**
    ```bash
-   pip install -r requirements.txt
+   pip install -r requirements.txt -r requirements-testing.txt
    ```
 2. **Run tests**
    ```bash

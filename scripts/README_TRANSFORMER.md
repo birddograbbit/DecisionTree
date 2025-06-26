@@ -53,8 +53,8 @@ recommended.
 ### 2. Basic Usage
 
 ```python
-from scripts.transformer_wrapper import TransformerModelWrapper
-from scripts.technical_indicators_transformer import add_technical_indicators
+from src.models.transformer.transformer_wrapper import TransformerModelWrapper
+from src.features.transformers.technical_indicators_transformer import add_technical_indicators
 
 # Prepare data
 df = pd.read_csv('your_data.csv')
@@ -77,10 +77,10 @@ predictions = transformer.predict(X_test)
 ### 3. Hybrid Strategy
 
 ```python
-from scripts.hybrid_strategy import HybridTransformerStrategy
+from src.models.ensemble.hybrid_strategy import HybridMLStrategy
 
 # Create hybrid strategy
-strategy = HybridTransformerStrategy(
+strategy = HybridMLStrategy(
     dt_model=your_decision_tree_model,
     tf_model=transformer,
     regime_detector=your_regime_detector
@@ -97,8 +97,7 @@ signals = strategy.generate_signals(data)
 Copy the transformer files to your project:
 
 ```bash
-cp scripts/transformer_*.py src/models/transformer/
-cp scripts/sequence_preparation.py src/models/transformer/
+cp path/to/your/prototype/*.py src/models/transformer/
 ```
 
 ### Step 2: Update Model Factory
@@ -137,23 +136,19 @@ Add to `src/strategies/`:
 
 ```python
 from src.strategies.base_strategy import BaseStrategy
-from scripts.hybrid_strategy import HybridTransformerStrategy
+from src.models.ensemble.hybrid_strategy import HybridMLStrategy
 
-class HybridMLStrategy(BaseStrategy, HybridTransformerStrategy):
+class HybridMLStrategy(BaseStrategy):
     """Unified hybrid strategy for the system."""
 
     def __init__(self, dt_model, tf_model, regime_detector):
         BaseStrategy.__init__(self)
-        HybridTransformerStrategy.__init__(
-            self,
-            dt_model=dt_model,
-            tf_model=tf_model,
-            regime_detector=regime_detector,
-        )
+        self.dt_model = dt_model
+        self.tf_model = tf_model
+        self.regime_detector = regime_detector
 ```
 
 Calling both parent constructors ensures attributes from `BaseStrategy` and
-`HybridTransformerStrategy` are initialized correctly when using multiple
 inheritance.
 
 ## Architecture Benefits

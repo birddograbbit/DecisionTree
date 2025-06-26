@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 
-class HybridTransformerStrategy:
+class HybridMLStrategy:
     """
     Hybrid strategy that combines DecisionTree and Transformer predictions.
     
@@ -87,6 +87,10 @@ class HybridTransformerStrategy:
         signals_df['position'] = self._generate_positions(combined_signals)
         
         return signals_df
+    def predict(self, data):
+        signals = self.generate_signals(data)
+        return signals["combined_signal"].values
+
         
     def _combine_predictions(self, dt_pred, tf_pred, regimes):
         """
@@ -246,7 +250,7 @@ def create_ensemble_predictions(models, data, weights=None):
     return ensemble
 
 
-class AdaptiveHybridStrategy(HybridTransformerStrategy):
+class AdaptiveHybridStrategy(HybridMLStrategy):
     """
     Advanced hybrid strategy with adaptive weighting.
     

@@ -20,3 +20,17 @@ class BatchPredictor:
                 out = self.model(batch)
                 preds.append(out.cpu())
         return torch.cat(preds).numpy()
+
+    def predict_large_dataset(self, dataset, device=None, show_progress=True):
+        """Predict using an existing TensorDataset."""
+        loader = DataLoader(dataset, batch_size=self.batch_size)
+        preds = []
+        self.model.eval()
+        device = device or getattr(self.model, 'device', 'cpu')
+        with torch.no_grad():
+            iterator = tqdm(loader, leave=False) if show_progress else loader
+            for batch in iterator:
+                batch = batch[0].to(device)
+                out = self.model(batch)
+                preds.append(out.cpu())
+        return torch.cat(preds)

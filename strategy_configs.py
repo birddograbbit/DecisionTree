@@ -4,6 +4,7 @@ Strategy configurations for different model types.
 This module contains pre-defined configurations for various trading strategies
 and models. These configurations can be used with the strategy_runner.py script.
 """
+import config
 
 # Decision Tree strategy configurations
 DECISION_TREE_CONFIG = {
@@ -158,5 +159,22 @@ STRATEGY_CONFIGS = {
     'xgboost_fixed': XGBOOST_FIXED_CONFIG,
     'xgboost_confidence': XGBOOST_CONFIDENCE_CONFIG,
     'stacking': STACKING_CONFIG,
-    'regime_adaptive_rf': REGIME_ADAPTIVE_RF_CONFIG
+    'regime_adaptive_rf': REGIME_ADAPTIVE_RF_CONFIG,
+    'transformer': {
+        'name': 'Transformer',
+        'model_type': 'transformer',
+        'model_params': config.TRANSFORMER_CONFIG['default'],
+        'position_sizing': 'confidence',
+        'use_adaptive_thresholds': 'auto'
+    },
+    'hybrid': {
+        'name': 'Hybrid',
+        'model_type': 'hybrid',
+        'model_params': {
+            'dt_params': {},
+            'tf_params': config.TRANSFORMER_CONFIG['default']
+        },
+        'position_sizing': 'confidence',
+        'use_adaptive_thresholds': 'auto'
+    }
 }

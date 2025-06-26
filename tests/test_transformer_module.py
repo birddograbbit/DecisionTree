@@ -3,8 +3,8 @@ import pandas as pd
 import torch
 import pytest
 
-from scripts.sequence_preparation import SequencePreparator
-from scripts.transformer_wrapper import TransformerModelWrapper
+from src.models.transformer.sequence_preparation import SequencePreparator
+from src.models.transformer.transformer_wrapper import TransformerModelWrapper
 
 
 def test_strict_feature_validation():

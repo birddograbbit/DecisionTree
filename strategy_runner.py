@@ -574,6 +574,8 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         config_key = 'xgboost_confidence'  # Default to confidence-based position sizing
     elif model_type == 'stacking':
         config_key = 'stacking'
+    elif model_type in ['transformer', 'hybrid']:
+        config_key = None
     
     if strategy_type == 'regime_adaptive' and model_type == 'random_forest':
         config_key = 'regime_adaptive_rf'
@@ -753,7 +755,8 @@ def parse_arguments():
     parser.add_argument('--mode', type=str, choices=['single', 'compare', 'audit'], default='single',
                         help='Mode: single strategy, comparison, or feature audit only (default: single)')
     
-    parser.add_argument('--model', type=str, choices=['decision_tree', 'random_forest', 'xgboost', 'stacking'],
+    parser.add_argument('--model', type=str,
+                        choices=['decision_tree', 'random_forest', 'xgboost', 'stacking', 'transformer', 'hybrid'],
                         default='random_forest',
                         help='Model type for single mode (default: random_forest)')
     

@@ -1,17 +1,18 @@
 # Transformer Integration Guide
 
-This guide explains how to migrate the prototype Transformer modules into the production `src` tree and test the hybrid system.
+This guide explains how to work with the transformer modules inside the DecisionTree project.
 
 1. **Install dependencies**
    ```bash
    pip install -r requirements.txt
-   pip install -r scripts/requirements_transformer.txt
    ```
-2. **Run the migration script**
+2. **Run tests**
    ```bash
-   bash scripts/migrate_transformer_modules.sh
+   pytest -q
    ```
-3. **Execute tests**
-   ```bash
-   pytest tests/test_transformer_integration.py
-   ```
+3. **Enable GPU acceleration**
+   - Ensure `torch.cuda.is_available()` returns `True`.
+   - Training will automatically use the GPU when available.
+4. **Deploy Hybrid Model**
+   - Create models via `ModelFactory.create_model('hybrid')`.
+   - Use `strategy_runner.py --model hybrid` to run the strategy.

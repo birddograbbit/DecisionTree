@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 import logging
 logger = logging.getLogger(__name__)
 
+from src.models.transformer.sequence_preparation import SequencePreparator, StockSequenceDataset
 # These will be imported from the main system when integrated
 # from src.models.base_model import BaseModel
 # For now, we'll create a minimal interface
@@ -131,9 +132,6 @@ class TransformerModelWrapper:
             For method chaining
         """
         logger.info("Starting transformer training")
-        from src.models.transformer.sequence_preparation import SequencePreparator, StockSequenceDataset
-        
-        # Convert to DataFrame if needed
         if isinstance(X, np.ndarray):
             X = pd.DataFrame(X)
         if isinstance(y, (pd.Series, np.ndarray)):
@@ -266,6 +264,13 @@ class TransformerModelWrapper:
             predictions = np.concatenate([padding, predictions])
             
         return predictions
+
+    def predict_large_dataset(self, data_array):
+        """Predict large numpy array using BatchPredictor."""
+        from src.models.transformer.batch_predictor import BatchPredictor
+        predictor = BatchPredictor(self.model, batch_size=self.batch_size)
+        return predictor.predict(data_array, device=self.device)
+
         
     def _create_target_sequences(self, y):
         """
@@ -378,7 +383,9 @@ class TransformerModelWrapper:
         
         # Restore state
         instance._create_model()
-        instance.model.load_state_dict(save_dict['model_state'])
+        state = save_dict.get('model_state', {})
+        if state:
+            instance.model.load_state_dict(state)
         instance.preparator = save_dict['preparator']
         instance.feature_columns = save_dict['feature_columns']
         instance.is_fitted = save_dict['is_fitted']

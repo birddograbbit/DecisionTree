@@ -21,3 +21,8 @@ class GPUOptimizedTransformer:
             self.scaler.scale(loss).backward()
             self.scaler.step(optimizer)
             self.scaler.update()
+        
+    def fit(self, dataloader, optimizer, epochs=1):
+        """Train for several epochs with mixed precision."""
+        for _ in range(epochs):
+            self.train_epoch(dataloader, optimizer)

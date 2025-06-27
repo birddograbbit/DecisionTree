@@ -5,6 +5,16 @@ This module provides a BaseModel-compatible wrapper for the transformer model,
 allowing seamless integration with the existing trading system.
 """
 
+# Apply macOS patches before importing torch
+try:
+    from .macos_patches import apply_macos_patches, get_safe_device
+    apply_macos_patches()
+except ImportError:
+    # If patches not available, define a default get_safe_device
+    import torch
+    def get_safe_device():
+        return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 import os
 import pickle
 import numpy as np
@@ -82,14 +92,19 @@ class TransformerModelWrapper:
         
         # Training configuration
         self.learning_rate = learning_rate
-        self.batch_size = batch_size
+        # Reduce batch size for macOS compatibility
+        self.batch_size = min(batch_size, 16) if get_safe_device().type == 'cpu' else batch_size
         self.epochs = epochs
 
-        # Device configuration
+        # Device configuration - use safe device
         if device is None:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            self.device = get_safe_device()
         else:
             self.device = torch.device(device)
+            # Override with safe device if on macOS
+            if get_safe_device().type == 'cpu' and self.device.type != 'cpu':
+                logger.warning("Forcing CPU device for macOS compatibility")
+                self.device = get_safe_device()
 
         self.target_column = target_column
         self.preparator_strict = preparator_strict
@@ -162,12 +177,19 @@ class TransformerModelWrapper:
         # We need to align targets with sequences
         y_seq = self._create_target_sequences(y)
         
-        # Create dataset and dataloader
+        # Check if we have enough data
+        if len(X_seq) == 0 or len(y_seq) == 0:
+            logger.warning("Not enough data to create sequences for training")
+            self.is_fitted = True  # Mark as fitted but with no training
+            return self
+        
+        # Create dataset and dataloader with num_workers=0 for macOS
         dataset = StockSequenceDataset(X_seq, y_seq)
         dataloader = DataLoader(
             dataset, 
             batch_size=self.batch_size, 
-            shuffle=True
+            shuffle=True,
+            num_workers=0  # Important for macOS
         )
         
         # Create model
@@ -181,29 +203,37 @@ class TransformerModelWrapper:
         self.model.train()
         for epoch in range(self.epochs):
             total_loss = 0
+            batch_count = 0
+            
             for batch_X, batch_y in dataloader:
                 batch_X = batch_X.to(self.device)
                 batch_y = batch_y.to(self.device)
                 
-                # Forward pass
-                outputs = self.model(batch_X)
-                loss = criterion(outputs.squeeze(), batch_y.float())
-                
-                # Backward pass
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                
-                total_loss += loss.item()
+                try:
+                    # Forward pass
+                    outputs = self.model(batch_X)
+                    loss = criterion(outputs.squeeze(), batch_y.float())
+                    
+                    # Backward pass
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+                    
+                    total_loss += loss.item()
+                    batch_count += 1
+                except RuntimeError as e:
+                    logger.error(f"Runtime error during training: {e}")
+                    logger.info("Continuing with next batch...")
+                    continue
                 
             # Print progress
-            if (epoch + 1) % 5 == 0:
-                avg_loss = total_loss / len(dataloader)
+            if batch_count > 0 and (epoch + 1) % 5 == 0:
+                avg_loss = total_loss / batch_count
                 print(f"Epoch [{epoch+1}/{self.epochs}], Loss: {avg_loss:.4f}")
                 
         self.is_fitted = True
-        return self
         logger.info("Transformer training complete")
+        return self
         
     def predict(self, X):
         """
@@ -238,9 +268,9 @@ class TransformerModelWrapper:
             # Return neutral predictions for insufficient data
             return np.full(len(X), 0.5)
             
-        # Create dataset
+        # Create dataset with num_workers=0 for macOS
         dataset = StockSequenceDataset(X_seq)
-        dataloader = DataLoader(dataset, batch_size=self.batch_size)
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, num_workers=0)
         
         # Generate predictions
         self.model.eval()

@@ -5,6 +5,16 @@ This module implements a transformer-based neural network designed for
 time series forecasting of stock prices.
 """
 
+# Apply macOS patches before importing torch
+try:
+    from .macos_patches import apply_macos_patches, get_safe_device
+    apply_macos_patches()
+except ImportError:
+    # If patches not available, define a default get_safe_device
+    import torch
+    def get_safe_device():
+        return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 import torch
 import torch.nn as nn
 import numpy as np

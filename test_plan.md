@@ -339,3 +339,118 @@ All automated tests and manual commands were executed in the Codex environment. 
 - Regime-adaptive strategy ran with optimized parameters, producing summary metrics.
 
 No failing tests were encountered after applying the above fixes.
+
+## Pre-Production Test Results (2025-06-28)
+
+### Phase 1: Environment Setup ✅
+
+All dependencies installed successfully:
+- **PyTorch**: 2.7.1
+- **Scikit-learn**: 1.7.0
+- **pytest**: 8.4.1
+- **All imports verified**: Transformer, Hybrid, and Model Factory components
+
+### Phase 2: Smoke Tests ✅
+
+#### Basic Imports
+- ✅ Transformer imports work
+- ✅ Hybrid imports work  
+- ✅ Model factory imports work
+
+#### Decision Tree Baseline Test
+```
+Performance Summary:
+Total Return: 41.96%
+CAGR: 4.97%
+Max Drawdown: 16.67%
+Sharpe Ratio: 0.37
+CAGR/Max DD: 0.30
+Win Rate: 80.00%
+Number of Trades: 5
+```
+
+#### Initial Transformer Tests
+- ✅ test_forward_pass PASSED
+- ✅ Sequence preparation: 4/4 tests PASSED
+- ⚠️ Coverage: 8.09% (vs 25% required)
+
+### Phase 3: Unit Testing (Partial) ⚠️
+
+#### Transformer Components
+- **test_transformer_model.py**: 6/6 PASSED
+  - Model initialization ✅
+  - Forward pass ✅
+  - Gradient flow ✅
+  - Save/load ✅
+  - Positional encoding ✅
+  - Multiple configs ✅
+
+- **test_transformer_wrapper.py**: 2/2 PASSED
+  - Train/predict ✅
+  - Missing data handling ✅
+
+- **test_sequence_preparation.py**: 4/4 PASSED
+- **test_technical_indicators.py**: 1/1 PASSED
+
+#### Auxiliary Components
+- **GPU Optimizer**: 1 PASSED, 1 SKIPPED (quantization not supported on macOS)
+- **Online Learning**: 1/1 PASSED
+- **Multi-task**: 1/1 PASSED
+- **Versioning**: 1/1 PASSED
+- **Error Recovery**: 1/1 PASSED
+
+#### Combined Transformer Tests
+- 16/16 tests PASSED
+- Coverage improved to 13.63% (still below 25% threshold)
+
+#### Critical Issue: Hybrid Strategy Test
+- **Status**: ❌ FAILED - Segmentation Fault
+- **Error Location**: PyTorch multi_head_attention_forward
+- **Impact**: Cannot test hybrid strategy integration
+
+### Test Coverage Analysis
+
+| Module | Coverage | Status |
+|--------|----------|--------|
+| transformer_model.py | 89.13% | ✅ Good |
+| transformer_wrapper.py | 89.39% | ✅ Good |
+| sequence_preparation.py | 70.83% | ✅ Good |
+| error_recovery.py | 72.73% | ✅ Good |
+| versioning.py | 94.44% | ✅ Excellent |
+| gpu_optimizer.py | 81.58% | ✅ Good |
+| multi_task.py | 93.33% | ✅ Excellent |
+| online_learning.py | 56.00% | ⚠️ Moderate |
+| **Overall System** | **13.63%** | ❌ Below threshold |
+
+### Key Findings
+
+1. **Individual Components**: Most transformer components work well in isolation with good test coverage
+2. **Integration Issue**: Critical segmentation fault when testing hybrid strategy
+3. **Coverage Gap**: Overall system coverage (13.63%) significantly below 25% requirement
+4. **Platform Limitation**: Quantization not supported on macOS (ARM architecture)
+
+### Recommendations
+
+1. **Immediate Actions**:
+   - Debug segmentation fault in hybrid strategy
+   - Investigate PyTorch compatibility with multi-head attention on macOS ARM
+   - Consider testing on x86_64 Linux environment
+
+2. **Coverage Improvements**:
+   - Add tests for untested modules (strategies, backtesting, feature engineering)
+   - Expand integration tests once hybrid issue is resolved
+
+3. **Next Steps**:
+   - Fix hybrid strategy crash before proceeding
+   - Complete remaining Phase 3-10 tests after resolution
+   - Consider containerized testing environment for consistency
+
+### Status Summary
+
+- **Environment Setup**: ✅ Complete
+- **Basic Functionality**: ✅ Working
+- **Unit Tests**: ⚠️ Partial (most pass, critical failure in hybrid)
+- **Integration Tests**: ❌ Blocked by hybrid strategy crash
+- **System Ready for Production**: ❌ No - critical issues must be resolved
+
+The system shows promise with individual components working well, but the hybrid strategy segmentation fault is a blocking issue that must be resolved before proceeding with further testing or production deployment.

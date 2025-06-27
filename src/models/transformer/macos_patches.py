@@ -47,9 +47,17 @@ def apply_macos_patches():
     for key, value in thread_settings.items():
         os.environ[key] = value
     
-    # PyTorch specific settings
-    torch.set_num_threads(1)
-    torch.set_num_interop_threads(1)
+    # PyTorch specific settings - only set if not already initialized
+    try:
+        torch.set_num_threads(1)
+    except RuntimeError as e:
+        logger.debug(f"Could not set PyTorch threads: {e}")
+    
+    try:
+        torch.set_num_interop_threads(1)
+    except RuntimeError as e:
+        logger.debug(f"Could not set PyTorch interop threads: {e}")
+        # This is expected if parallel work has already started
     
     # Disable MPS backend if it causes issues
     os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
@@ -61,8 +69,12 @@ def apply_macos_patches():
     logger.info("Applied macOS ARM patches:")
     for key, value in thread_settings.items():
         logger.info(f"  {key}={value}")
-    logger.info(f"  PyTorch threads: {torch.get_num_threads()}")
-    logger.info(f"  PyTorch interop threads: {torch.get_num_interop_threads()}")
+    
+    try:
+        logger.info(f"  PyTorch threads: {torch.get_num_threads()}")
+        logger.info(f"  PyTorch interop threads: {torch.get_num_interop_threads()}")
+    except:
+        logger.info("  PyTorch thread settings: already initialized")
     
     warnings.warn(
         "Running on macOS ARM with compatibility patches. "

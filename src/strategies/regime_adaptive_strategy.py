@@ -444,11 +444,16 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
             Trading signals
         """
         try:
-            # Initialize signals based on parent method, but without sending
-            # predictions (we'll use regime-specific models if available)
-            # Create a signals dataframe first
-            signals = pd.DataFrame(index=dates)
-            signals['date'] = dates
+            # FIX: Handle date ambiguity upfront
+            if isinstance(features, pd.DataFrame):
+                if features.index.name == 'date' and 'date' in features.columns:
+                    features = features.reset_index(drop=True)
+                elif features.index.name == 'date':
+                    features = features.reset_index(drop=True)
+            
+            # Initialize signals DataFrame without date index to avoid ambiguity
+            signals = pd.DataFrame()
+            signals['date'] = dates  # Use dates parameter directly
             signals['symbol'] = self.config.get('symbol', 'SPY')
             signals['signal'] = 0  # Initialize with no signal
             signals['probability'] = 0.5  # Default probability

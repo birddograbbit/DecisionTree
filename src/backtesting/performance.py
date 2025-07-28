@@ -12,7 +12,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 pd.set_option('future.no_silent_downcasting', True)
 
 
-def calculate_performance_metrics(equity_curve, trades):
+def calculate_performance_metrics(equity_curve, trades, timeframe='daily'):
     """
     Calculate performance metrics from equity curve and trades.
     
@@ -22,6 +22,8 @@ def calculate_performance_metrics(equity_curve, trades):
         Equity curve with 'equity' column
     trades : list or pd.DataFrame
         List of trades or DataFrame with trades
+    timeframe : str, default='daily'
+        Trading timeframe ('daily', '5min', '5T')
         
     Returns:
     --------
@@ -48,13 +50,18 @@ def calculate_performance_metrics(equity_curve, trades):
     # Calculate daily metrics
     total_return = (equity.iloc[-1] / equity.iloc[0]) - 1
     
-    # Trading days per year (approximate)
-    trading_days_per_year = 252
+    # Determine periods per year based on timeframe
+    if timeframe in ['5min', '5T', '5m']:
+        # 5-minute bars: 78 bars per day * 252 trading days
+        periods_per_year = 78 * 252  # 19,656 bars per year
+    else:
+        # Default to daily
+        periods_per_year = 252
     
     # Calculate annualized metrics
-    years = max(len(returns) / trading_days_per_year, 0.01)  # Minimum 0.01 to avoid division by zero
+    years = max(len(returns) / periods_per_year, 0.01)  # Minimum 0.01 to avoid division by zero
     ann_return = (1 + total_return) ** (1 / years) - 1
-    ann_volatility = returns.std() * np.sqrt(trading_days_per_year) if len(returns) > 1 else 0
+    ann_volatility = returns.std() * np.sqrt(periods_per_year) if len(returns) > 1 else 0
     
     # Calculate Sharpe ratio (assuming risk-free rate of 0.02)
     risk_free_rate = 0.02
@@ -74,7 +81,18 @@ def calculate_performance_metrics(equity_curve, trades):
         profit_factor = abs(trades_df[trades_df['pnl'] > 0]['pnl'].sum() / trades_df[trades_df['pnl'] < 0]['pnl'].sum()) if (trades_df['pnl'] < 0).any() else np.inf
         avg_win = trades_df[trades_df['pnl'] > 0]['pnl'].mean() if (trades_df['pnl'] > 0).any() else 0
         avg_loss = trades_df[trades_df['pnl'] < 0]['pnl'].mean() if (trades_df['pnl'] < 0).any() else 0
-        avg_holding_period = trades_df['holding_days'].mean() if 'holding_days' in trades_df.columns else np.nan
+        
+        # Handle holding period based on timeframe
+        if 'holding_days' in trades_df.columns:
+            if timeframe in ['5min', '5T', '5m']:
+                # For 5-minute data, convert days to bars
+                avg_holding_period = trades_df['holding_days'].mean() * 78  # 78 bars per day
+            else:
+                avg_holding_period = trades_df['holding_days'].mean()
+        elif 'holding_bars' in trades_df.columns:
+            avg_holding_period = trades_df['holding_bars'].mean()
+        else:
+            avg_holding_period = np.nan
     else:
         num_trades = 0
         win_rate = 0

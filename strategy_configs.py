@@ -150,6 +150,142 @@ REGIME_ADAPTIVE_RF_CONFIG = {
     'sell_percentile': 20                 # Use 20th percentile as sell threshold
 }
 
+# Momentum Strategy Configurations
+
+# BB-RSI-ADX Momentum Continuation Strategy
+BB_RSI_ADX_CONFIG = {
+    'name': 'BB-RSI-ADX Momentum',
+    'model_type': 'bb_rsi_adx',
+    'symbol': 'SPY',  # Will be overridden by command line
+    'position_size': 0.1,
+    'primary_timeframe': '1h',
+    # Strategy parameters
+    'bb_period': 20,
+    'bb_std': 2,
+    'rsi_period': 14,
+    'rsi_overbought': 70,
+    'rsi_oversold': 30,
+    'supertrend_period': 10,
+    'supertrend_multiplier': 3,
+    'adx_primary_threshold': 20,
+    'adx_secondary_threshold': 40,
+    'atr_stop_multiplier': 6,
+    'bars_to_enter': 1,
+    'allow_same_bar_exit': False
+}
+
+# TEMA Trend Following Strategy
+TEMA_CONFIG = {
+    'name': 'TEMA Trend Following',
+    'model_type': 'tema',
+    'symbol': 'SPY',  # Will be overridden by command line
+    'position_size': 0.1,
+    'primary_timeframe': '1h',
+    # Strategy parameters
+    'tema_primary_fast': 10,
+    'tema_primary_slow': 80,
+    'tema_secondary_fast': 20,
+    'tema_secondary_slow': 70,
+    'adx_threshold': 40,
+    'cmo_long_threshold': 40,
+    'cmo_short_threshold': -40,
+    'atr_entry_offset': 1,
+    'atr_stop_loss': 3,
+    'atr_take_profit': 3,
+    'bars_to_enter': 6,
+    'use_dual_timeframe': True,
+    'allow_same_bar_exit': False
+}
+
+# Quod Stochastic Strategy
+QUOD_CONFIG = {
+    'name': 'Quod Stochastic',
+    'model_type': 'quod',
+    'symbol': 'SPY',  # Will be overridden by command line
+    'position_size': 0.1,
+    'primary_timeframe': '5T',  # 5-minute bars
+    # Strategy modes
+    'use_stoch_reversal': True,
+    'use_stoch_pullback': True,
+    'use_d60_trend_entry': False,
+    'use_d60_trend_exit': True,
+    'use_trailing_stop': False,
+    'use_force_eod': False,
+    # Stochastic parameters
+    'stoch_k_period': 14,
+    'stoch_d_period': 3,
+    'stoch_overbought': 80,
+    'stoch_oversold': 20,
+    # D60 trend parameters
+    'd60_lookback': 60,
+    'trend_threshold': 0.02,
+    # Position management
+    'long_tp_perc': 1.01,
+    'long_sl_perc': 0.99,
+    'long_trail_activation_perc': 1.005,
+    'long_trail_offset_ticks': 100,
+    # Exit thresholds
+    'rev_long_exit_count': 3,
+    'rev_long_exit_threshold': 80.0,
+    'rev_short_exit_count': 3,
+    'rev_short_exit_threshold': 20.0,
+    'pullback_long_exit_count': 2,
+    'pullback_long_exit_threshold': 80.0,
+    'pullback_short_exit_count': 2,
+    'pullback_short_exit_threshold': 20.0,
+    # End of day exit
+    'end_of_day_hour': 16,
+    'end_of_day_minute': 0,
+    'allow_same_bar_exit': True
+}
+
+# 5-Minute Strategy Configurations
+
+# BB-RSI-ADX 5-Minute Configuration
+BB_RSI_ADX_5MIN_CONFIG = {
+    'name': 'BB-RSI-ADX Momentum (5min)',
+    'model_type': 'bb_rsi_adx',
+    'symbol': 'SPY',  # Will be overridden by command line
+    'position_size': 0.05,  # Smaller position size for higher frequency
+    'primary_timeframe': '5T',
+    # Strategy parameters optimized for 5-minute bars
+    'bb_period': 20,
+    'bb_std': 2,
+    'rsi_period': 9,  # Faster RSI for 5-min bars
+    'rsi_overbought': 75,  # Slightly higher threshold
+    'rsi_oversold': 25,  # Slightly lower threshold
+    'supertrend_period': 10,
+    'supertrend_multiplier': 2.5,  # Tighter multiplier
+    'adx_primary_threshold': 15,  # Lower threshold for 5-min
+    'adx_secondary_threshold': 30,  # Lower secondary threshold
+    'atr_stop_multiplier': 4,  # Tighter stops for 5-min
+    'bars_to_enter': 1,
+    'allow_same_bar_exit': True  # Allow quick exits
+}
+
+# TEMA 5-Minute Configuration
+TEMA_5MIN_CONFIG = {
+    'name': 'TEMA Trend Following (5min)',
+    'model_type': 'tema',
+    'symbol': 'SPY',  # Will be overridden by command line
+    'position_size': 0.05,
+    'primary_timeframe': '5T',
+    # Strategy parameters optimized for 5-minute bars
+    'tema_primary_fast': 8,  # Faster periods for 5-min
+    'tema_primary_slow': 26,
+    'tema_secondary_fast': 12,
+    'tema_secondary_slow': 35,
+    'adx_threshold': 25,  # Lower threshold
+    'cmo_long_threshold': 30,  # Less extreme thresholds
+    'cmo_short_threshold': -30,
+    'atr_entry_offset': 0.5,  # Tighter entry
+    'atr_stop_loss': 2,  # Tighter stops
+    'atr_take_profit': 2,  # Smaller targets
+    'bars_to_enter': 3,  # Shorter persistence
+    'use_dual_timeframe': False,  # Single timeframe for 5-min
+    'allow_same_bar_exit': True
+}
+
 # All strategy configurations
 STRATEGY_CONFIGS = {
     'decision_tree': DECISION_TREE_CONFIG,
@@ -176,5 +312,12 @@ STRATEGY_CONFIGS = {
         },
         'position_sizing': 'confidence',
         'use_adaptive_thresholds': 'auto'
-    }
+    },
+    # Momentum strategies
+    'bb_rsi_adx': BB_RSI_ADX_CONFIG,
+    'tema': TEMA_CONFIG,
+    'quod': QUOD_CONFIG,
+    # 5-minute momentum strategies
+    'bb_rsi_adx_5min': BB_RSI_ADX_5MIN_CONFIG,
+    'tema_5min': TEMA_5MIN_CONFIG
 }

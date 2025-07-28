@@ -9,8 +9,9 @@ The DecisionTree project is a hybrid ML trading system that combines traditional
 - Max Drawdown: < 20%
 
 **Current Status**: 
-- Best Sharpe: 0.37 (Decision Tree)
-- Key Issue: Low trading frequency (5-6 trades) due to conservative thresholds
+- Best Sharpe: 1.53 (Quod strategy on 5-minute data) ✅
+- ML strategies need optimization for intraday data
+- Momentum strategies excel on 5-minute timeframe
 
 ## Project Structure
 ```
@@ -57,33 +58,36 @@ DecisionTree/
 └── requirements.txt                 # Python dependencies
 ```
 
-## Recent Fixes Implemented
+## Recent Implementations (July 2025)
 
-### 1. XGBoost Focal Loss Implementation
-- **Problem**: XGBoost parameter warnings for focal loss
-- **Solution**: Implemented focal loss as custom objective function
-- **Location**: `src/models/xgboost_model.py`
-- **Impact**: Better handling of class imbalance (57% up vs 43% down days)
+### 1. Strategy Adapter Pattern ✅
+- **Achievement**: Full implementation with 3 momentum strategies
+- **Components**: BaseStrategy enhancement, StrategyRegistry, Multi-timeframe support
+- **Impact**: Clean architecture for testing sophisticated strategies
 
-### 2. RegimeAdaptiveStrategy Date Fix
-- **Problem**: Pandas ambiguity error with 'date' as both index and column
-- **Solution**: Proper date handling in generate_signals method
-- **Location**: `src/strategies/regime_adaptive_strategy.py`
-- **Impact**: Enables regime-based trading
+### 2. 5-Minute Data Support ✅
+- **Achievement**: Complete integration of intraday data
+- **Components**: Data loading, timeframe-aware metrics, proper CAGR/Sharpe calculations
+- **Impact**: Momentum strategies achieve 1.40-1.53 Sharpe ratios
+
+### 3. Performance Metrics Fixes ✅
+- **Problem**: CAGR showing 0.00% for 5-minute data
+- **Solution**: Timeframe-aware calculations (19,656 periods/year for 5-min)
+- **Impact**: Accurate performance measurement across all timeframes
 
 ## Key Technical Details
 
-### Models Available
-1. **Decision Tree**: Simple, interpretable, best current Sharpe (0.37)
-2. **Random Forest**: Ensemble of decision trees
-3. **XGBoost**: Gradient boosting with focal loss support
-4. **Transformer**: Deep learning for sequence prediction
-5. **Stacking Ensemble**: Combines multiple models
-6. **Hybrid**: Combines decision tree with transformer
+### Models/Strategies Available
+1. **ML Models**: Decision Tree, Random Forest, XGBoost (need optimization for 5-min data)
+2. **Ensemble Models**: Stacking, Transformer, Hybrid
+3. **Momentum Strategies**: 
+   - BB-RSI-ADX: 1.40 Sharpe on 5-min data
+   - TEMA: 0.76 Sharpe on 5-min data  
+   - Quod: 1.53 Sharpe on 5-min data ✅
 
-### Strategy Types
-1. **TrendFollowingStrategy**: Base strategy using probability thresholds
-2. **RegimeAdaptiveStrategy**: Adapts parameters based on market regimes
+### Supported Timeframes
+1. **Daily**: Traditional ML models trained on this
+2. **5-Minute**: Momentum strategies excel here
 
 ### Configuration Parameters
 ```python
@@ -96,61 +100,62 @@ LOOKBACK_PERIOD = 10
 TRANSACTION_COST = 0.001  # 0.1% per trade
 ```
 
-## Performance Analysis Results
-From `optimized_comparison/strategy_comparison.csv`:
-- Decision Tree: 42% return, 0.37 Sharpe, 5 trades
-- Random Forest: 16% return, 0.01 Sharpe, 6 trades
-- XGBoost: 24% return, 0.06 Sharpe, 63 trades
-- Regime Adaptive: Working but limited by few trades
+## Latest Performance Results (July 28, 2025)
+
+### Daily Data (Poor Performance)
+- Decision Tree: -38.44% return, -19.36 Sharpe
+- Random Forest: -35.62% return, -17.42 Sharpe
+- XGBoost: -1.68% return, -0.39 Sharpe
+
+### 5-Minute Data (Excellent Performance)
+- BB-RSI-ADX: 8.25% return, 1.40 Sharpe, 935 trades
+- TEMA: 5.81% return, 0.76 Sharpe, 1,904 trades
+- Quod: 14.98% return, 1.53 Sharpe, 3,195 trades ✅
 
 ## Main Issues to Address
-1. **Wrong Optimization Metric**: Using accuracy instead of Sharpe ratio
-2. **Conservative Thresholds**: 0.65/0.35 causing very few trades
-3. **Limited Features**: Basic indicators, no momentum-specific features
-4. **No Multi-Timeframe Analysis**: Single timeframe limiting signal quality
+1. **ML Strategy Optimization**: Need to retrain for 5-minute data patterns
+2. **Trading-Focused Optimization**: Use Sharpe ratio instead of accuracy
+3. **Hybrid Approaches**: Combine ML with momentum strategies
+4. **Ensemble Methods**: Multi-timeframe and multi-strategy combinations
 
-## Recommended Next Steps (Priority Order)
+## Next Steps (Priority Order)
 
-### 1. Implement Strategy Adapter Pattern (HIGH)
-Create flexible architecture to test sophisticated momentum strategies:
-- BB-RSI-ADX: Bollinger Bands + RSI extremes + ADX trend strength
-- TEMA: Triple Exponential Moving Average with trend filters
-- Quod: Stochastic reversal/pullback with position management
+### 1. ML Strategy Optimization for 5-Minute Data (HIGH) 
+Retrain ML models with intraday-specific features and shorter lookback periods
 
-### 2. Trading-Focused Optimization (HIGH)
+### 2. Hybrid ML-Momentum Strategies (HIGH)
+Combine ML predictions with momentum signals for robust performance
+
+### 3. Trading-Focused Optimization (HIGH)
 Replace accuracy with Sharpe ratio in hyperparameter optimization
 
-### 3. Adaptive Thresholds (HIGH)
-Dynamic thresholds based on recent probability distribution
+### 4. Ensemble of Timeframes (MEDIUM)
+Combine signals from multiple timeframes (5min, 15min, 1h, daily)
 
-### 4. Enhanced Transformer Features (HIGH)
-Add momentum indicators and multi-timeframe analysis
-
-### 5. Walk-Forward Optimization (MEDIUM)
-More realistic backtesting with rolling windows
+### 5. Regime-Aware Strategy Selection (MEDIUM)
+Dynamically select strategy based on market conditions
 
 ## Command Examples
 
-### Basic Usage
+### Daily Data Testing
 ```bash
-# Run single strategy
-python strategy_runner.py --data data/raw --model random_forest --mode single --output rf_test
+# Compare all strategies on daily data
+python strategy_runner.py --data data/raw --mode compare --include-momentum --output daily_comparison
+```
 
-# Compare strategies
-python strategy_runner.py --data data/raw --mode compare --output comparison_results
+### 5-Minute Data Testing 
+```bash
+# Test single momentum strategy
+python strategy_runner.py --data data/raw --model quod --mode single --output quod_5min --timeframe 5min
 
-# Use optimized parameters
-python strategy_runner.py --data data/raw --use-optimized --mode compare
-
-# Test with focal loss
-python strategy_runner.py --data data/raw --model xgboost \
-    --model-params "use_focal_loss=True,focal_gamma=2.0" --mode single
+# Compare all strategies on 5-minute data
+python strategy_runner.py --data data/raw --mode compare --include-momentum --output 5min_comparison --timeframe 5min
 ```
 
 ### Feature Analysis
 ```bash
 # Run feature importance audit
-python strategy_runner.py --data data/raw --mode feature_audit --output feature_analysis
+python strategy_runner.py --data data/raw --mode audit --audit-model random_forest --output feature_analysis
 ```
 
 ## External Momentum Strategies
@@ -168,10 +173,11 @@ These contain sophisticated momentum strategies that could significantly enhance
 
 ## Important Notes for Future Sessions
 1. When running commands, always use the virtual environment
-2. The system uses daily SPY data from 1999-2025
-3. Transaction costs are 0.1% per trade
-4. Look-ahead bias has been carefully avoided in all strategies
-5. The transformer model supports both CPU and GPU (with macOS patches)
+2. The system supports both daily and 5-minute SPY data
+3. Transaction costs: 0.1% (daily), 0.05% (5-minute)
+4. Quod strategy achieved 1.53 Sharpe ratio, exceeding v0.2 target
+5. ML strategies need retraining for 5-minute data patterns
+6. Momentum strategies work best on intraday timeframes
 
 ## Quick Reference for Common Tasks
 

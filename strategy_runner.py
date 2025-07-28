@@ -16,21 +16,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-from src.data.preprocessing import preprocess_data
+from src.data.preprocessing import preprocess_data, load_5min_data
 from src.strategies.trend_following import TrendFollowingStrategy
 from src.strategies.regime_adaptive_strategy import RegimeAdaptiveStrategy
+from src.strategies.strategy_registry import StrategyRegistry
 from src.models.model_factory import ModelFactory
 from src.models.hyperparameter_manager import HyperparameterManager
 from src.features.feature_engineering import (
     prepare_train_test_data,
     audit_features,
     prune_features,
-    check_collinearity
+    check_collinearity,
+    add_technical_indicators,
+    engineer_features
 )
 from strategy_configs import STRATEGY_CONFIGS
 import config
 
-def load_data(data_path, symbol='SPY'):
+def load_data(data_path, symbol='SPY', timeframe='daily'):
     """
     Load and preprocess historical price data.
     
@@ -40,19 +43,35 @@ def load_data(data_path, symbol='SPY'):
         Path to the data file or directory
     symbol : str, default='SPY'
         Symbol for the data
+    timeframe : str, default='daily'
+        Data timeframe - 'daily' or '5min'
         
     Returns:
     --------
     pd.DataFrame
         Preprocessed price data
     """
-    # Check if the path points to a file or directory
+    # Handle 5-minute data specifically
+    if timeframe == '5min':
+        # Use specific 5-minute data files
+        train_file = os.path.join(data_path, f'historical_data_STOCK_{symbol}_5_mins_2023-2024.csv')
+        test_file = os.path.join(data_path, f'historical_data_STOCK_{symbol}_5_mins_2025.csv')
+        
+        if not os.path.exists(train_file) or not os.path.exists(test_file):
+            raise FileNotFoundError(f"5-minute data files not found for {symbol}")
+        
+        # Use the dedicated 5-minute data loading function
+        df = load_5min_data(train_file, test_file)
+        # Don't preprocess again as load_5min_data already handles it
+        return df
+    
+    # Original logic for daily data
     if os.path.isfile(data_path):
         # Load data from single file
         df = pd.read_csv(data_path, index_col=0, parse_dates=True)
     else:
         # Look for CSV files in the directory
-        csv_files = [f for f in os.listdir(data_path) if f.endswith('.csv') and symbol in f]
+        csv_files = [f for f in os.listdir(data_path) if f.endswith('.csv') and symbol in f and '5_mins' not in f]
         
         if not csv_files:
             raise FileNotFoundError(f"No CSV files found for {symbol} in {data_path}")
@@ -77,7 +96,7 @@ def load_data(data_path, symbol='SPY'):
     return df
 
 def run_feature_audit(data_path, output_dir, model_type='random_forest', 
-                     top_n_features=None, audit_only=False, symbol='SPY'):
+                     top_n_features=None, audit_only=False, symbol='SPY', timeframe='daily'):
     """
     Run feature importance audit on the data.
     
@@ -109,16 +128,46 @@ def run_feature_audit(data_path, output_dir, model_type='random_forest',
     print(f"\n=== Running Feature Audit with {model_type} ===")
     
     # Load and prepare data
-    df = load_data(data_path, symbol=symbol)
+    df = load_data(data_path, symbol=symbol, timeframe=timeframe)
     
     # Use config default if not specified
     if top_n_features is None:
         top_n_features = config.TOP_N_FEATURES
     
-    # Prepare training and testing data without feature pruning
-    X_train, X_test, y_train, y_test, dates_train, dates_test, scaler = prepare_train_test_data(
-        df, train_end_date=None, prune_features_flag=False
+    # Determine lookback period based on timeframe
+    lookback_period = config.LOOKBACK_PERIOD_5MIN if timeframe == '5min' else config.LOOKBACK_PERIOD
+    print(f"Using lookback period: {lookback_period} {'bars' if timeframe == '5min' else 'days'}")
+    
+    # Add technical indicators with appropriate lookback
+    df_features = add_technical_indicators(df, lookback_period)
+    
+    # Engineer features with appropriate lookback
+    X, y, dates = engineer_features(df_features, lookback_period)
+    
+    # Split data for audit (using 70/30 split)
+    train_size = int(len(X) * 0.7)
+    X_train = X.iloc[:train_size]
+    X_test = X.iloc[train_size:]
+    y_train = y.iloc[:train_size]
+    y_test = y.iloc[train_size:]
+    dates_train = dates[:train_size]
+    dates_test = dates[train_size:]
+    
+    # Scale features
+    from sklearn.preprocessing import StandardScaler
+    scaler = StandardScaler()
+    X_train_scaled = pd.DataFrame(
+        scaler.fit_transform(X_train),
+        columns=X_train.columns,
+        index=X_train.index
     )
+    X_test_scaled = pd.DataFrame(
+        scaler.transform(X_test),
+        columns=X_test.columns,
+        index=X_test.index
+    )
+    X_train = X_train_scaled
+    X_test = X_test_scaled
     
     print(f"Original feature count: {X_train.shape[1]}")
     print(f"Features: {list(X_train.columns)}")
@@ -224,7 +273,7 @@ def run_feature_audit(data_path, output_dir, model_type='random_forest',
 def run_strategy_comparison(data_path, output_dir='results_comparison', 
                            train_end_date=None, symbol='SPY', use_optimized_params=False,
                            run_feature_audit_flag=False, audit_model='random_forest', 
-                           top_n_features=None):
+                           top_n_features=None, include_momentum=False, timeframe='daily'):
     """
     Run comparison of different strategies/models.
     
@@ -247,6 +296,8 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         Model type to use for feature importance evaluation
     top_n_features : int, optional
         Number of top features to keep after auditing
+    include_momentum : bool, default=False
+        Whether to include momentum strategies in comparison
         
     Returns:
     --------
@@ -260,7 +311,7 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
     if run_feature_audit_flag:
         print("=== Feature Audit Phase ===")
         top_features, audit_results = run_feature_audit(
-            data_path, output_dir, audit_model, top_n_features, audit_only=True, symbol=symbol
+            data_path, output_dir, audit_model, top_n_features, audit_only=True, symbol=symbol, timeframe=timeframe
         )
         print(f"Feature audit completed. Selected {len(top_features)} features.")
         
@@ -270,7 +321,7 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
                 f.write(f"{feature}\n")
     
     # Load data
-    df = load_data(data_path, symbol=symbol)
+    df = load_data(data_path, symbol=symbol, timeframe=timeframe)
     
     # Define training and testing periods
     if train_end_date is not None:
@@ -287,7 +338,7 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
     print(f"Testing data: {len(test_data)} rows ({test_data.index[0]} to {test_data.index[-1]})")
     
     # Get strategy configurations
-    strategy_configs = get_strategy_configs(use_optimized_params)
+    strategy_configs = get_strategy_configs(use_optimized_params, include_momentum=include_momentum, timeframe=timeframe)
     
     # Set symbol for all configs and feature audit settings
     for config in strategy_configs:
@@ -307,16 +358,23 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
     for config in strategy_configs:
         print(f"\n=== Running strategy: {config['name']} ===")
 
-        # Initialize strategy based on name
+        # Determine strategy type from config name
         if 'Regime Adaptive' in config['name']:
-            strategy = RegimeAdaptiveStrategy()
+            strategy_type = 'regime_adaptive'
+        elif 'BB-RSI-ADX' in config['name']:
+            strategy_type = 'bb_rsi_adx'
+        elif 'TEMA' in config['name']:
+            strategy_type = 'tema'
+        elif 'Quod' in config['name']:
+            strategy_type = 'quod'
         else:
-            strategy = TrendFollowingStrategy()
+            strategy_type = 'trend_following'
             
-        strategy.initialize(config)
+        # Use StrategyRegistry to get strategy instance
+        strategy = StrategyRegistry.get_strategy(strategy_type, config)
 
         # Run backtest
-        backtest_results = strategy.backtest(df, train_data, test_data)
+        backtest_results = strategy.backtest(df, train_data, test_data, timeframe)
 
         # Store results
         results[config['name']] = backtest_results
@@ -458,7 +516,7 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
 
     return results
 
-def get_strategy_configs(use_optimized_params=False):
+def get_strategy_configs(use_optimized_params=False, include_momentum=False, timeframe='daily'):
     """
     Get strategy configurations, optionally using optimized hyperparameters.
     
@@ -466,6 +524,10 @@ def get_strategy_configs(use_optimized_params=False):
     -----------
     use_optimized_params : bool
         Whether to use optimized hyperparameters
+    include_momentum : bool
+        Whether to include momentum strategies
+    timeframe : str
+        Data timeframe - 'daily' or '5min'
         
     Returns:
     --------
@@ -484,6 +546,23 @@ def get_strategy_configs(use_optimized_params=False):
         STRATEGY_CONFIGS['regime_adaptive_rf'].copy()
     ]
     
+    # Add momentum strategies if requested
+    if include_momentum:
+        if timeframe == '5min':
+            # Use 5-minute optimized configurations
+            strategy_configs.extend([
+                STRATEGY_CONFIGS['bb_rsi_adx_5min'].copy(),
+                STRATEGY_CONFIGS['tema_5min'].copy(),
+                STRATEGY_CONFIGS['quod'].copy()  # Quod already configured for 5T
+            ])
+        else:
+            # Use standard configurations
+            strategy_configs.extend([
+                STRATEGY_CONFIGS['bb_rsi_adx'].copy(),
+                STRATEGY_CONFIGS['tema'].copy(),
+                STRATEGY_CONFIGS['quod'].copy()
+            ])
+    
     # If using optimized parameters, set flag in config
     if use_optimized_params:
         for config in strategy_configs:
@@ -499,7 +578,7 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
                        train_end_date=None, symbol='SPY', strategy_type='trend_following',
                        calibrate=False, use_optimized_params=False, 
                        run_feature_audit_flag=False, audit_model='random_forest',
-                       top_n_features=None):
+                       top_n_features=None, timeframe='daily'):
     """
     Run a single strategy with specified parameters.
     
@@ -541,12 +620,12 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     if run_feature_audit_flag:
         print("=== Feature Audit Phase ===")
         top_features, audit_results = run_feature_audit(
-            data_path, output_dir, audit_model, top_n_features, audit_only=True, symbol=symbol
+            data_path, output_dir, audit_model, top_n_features, audit_only=True, symbol=symbol, timeframe=timeframe
         )
         print(f"Feature audit completed. Selected {len(top_features)} features.")
     
     # Load data
-    df = load_data(data_path, symbol=symbol)
+    df = load_data(data_path, symbol=symbol, timeframe=timeframe)
     
     # Define training and testing periods
     if train_end_date is not None:
@@ -563,26 +642,65 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     print(f"Training data: {len(train_data)} rows ({train_data.index[0]} to {train_data.index[-1]})")
     print(f"Testing data: {len(test_data)} rows ({test_data.index[0]} to {test_data.index[-1]})")
     
-    # Select appropriate configuration from STRATEGY_CONFIGS
-    config_key = None
+    # Check if model_type is a momentum strategy
+    momentum_strategies = ['bb_rsi_adx', 'tema', 'quod']
     
-    if model_type == 'decision_tree':
-        config_key = 'decision_tree_calibrated' if calibrate else 'decision_tree'
-    elif model_type == 'random_forest':
-        config_key = 'random_forest_calibrated' if calibrate else 'random_forest'
-    elif model_type == 'xgboost':
-        config_key = 'xgboost_confidence'  # Default to confidence-based position sizing
-    elif model_type == 'stacking':
-        config_key = 'stacking'
-    elif model_type in ['transformer', 'hybrid']:
+    if model_type in momentum_strategies:
+        # For momentum strategies, use the model type as the strategy type
+        strategy_type = model_type
+        config_key = None  # Will create custom config below
+    else:
+        # Select appropriate configuration from STRATEGY_CONFIGS for ML models
         config_key = None
-    
-    if strategy_type == 'regime_adaptive' and model_type == 'random_forest':
-        config_key = 'regime_adaptive_rf'
+        
+        if model_type == 'decision_tree':
+            config_key = 'decision_tree_calibrated' if calibrate else 'decision_tree'
+        elif model_type == 'random_forest':
+            config_key = 'random_forest_calibrated' if calibrate else 'random_forest'
+        elif model_type == 'xgboost':
+            config_key = 'xgboost_confidence'  # Default to confidence-based position sizing
+        elif model_type == 'stacking':
+            config_key = 'stacking'
+        elif model_type in ['transformer', 'hybrid']:
+            config_key = None
+        
+        if strategy_type == 'regime_adaptive' and model_type == 'random_forest':
+            config_key = 'regime_adaptive_rf'
     
     # Get configuration
     if config_key and config_key in STRATEGY_CONFIGS:
         config = STRATEGY_CONFIGS[config_key].copy()
+    elif model_type in momentum_strategies:
+        # Create configuration for momentum strategies
+        config = {
+            'name': model_type.upper().replace('_', '-'),
+            'symbol': symbol,
+            'position_size': 0.1,
+            'primary_timeframe': '1h'  # Default timeframe
+        }
+        
+        # Add strategy-specific default parameters
+        if model_type == 'bb_rsi_adx':
+            config.update({
+                'bb_period': 20,
+                'rsi_period': 14,
+                'adx_primary_threshold': 20,
+                'adx_secondary_threshold': 40
+            })
+        elif model_type == 'tema':
+            config.update({
+                'tema_primary_fast': 10,
+                'tema_primary_slow': 80,
+                'adx_threshold': 40,
+                'use_dual_timeframe': True
+            })
+        elif model_type == 'quod':
+            config.update({
+                'use_stoch_reversal': True,
+                'use_stoch_pullback': True,
+                'use_d60_trend_exit': True,
+                'primary_timeframe': '5T'  # 5-minute default for Quod
+            })
     else:
         # Fallback to basic configuration
         config = {
@@ -617,7 +735,6 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     
     # Initialize and run strategy
     if strategy_type == 'regime_adaptive':
-        strategy = RegimeAdaptiveStrategy()
         config['name'] = f"Regime Adaptive {model_type.title()}"
         
         # Add regime detection if not present
@@ -645,15 +762,15 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
                 'downtrend': {'position_size_pct': 0.02, 'stop_loss_pct': 0.02, 'take_profit_pct': 0.05},
                 'strong_downtrend': {'position_size_pct': 0.01, 'stop_loss_pct': 0.01, 'take_profit_pct': 0.03}
             }
-    else:
-        strategy = TrendFollowingStrategy()
     
-    strategy.initialize(config)
+    # Use StrategyRegistry to get strategy instance
+    strategy = StrategyRegistry.get_strategy(strategy_type, config)
     
     # Run backtest
-    results = strategy.backtest(df, train_data, test_data)
+    results = strategy.backtest(df, train_data, test_data, timeframe)
     
-    # Save model
+    # Save model/strategy
+    # For momentum strategies, this saves configuration only
     model_path = os.path.join(output_dir, f"{model_type}_model.pkl")
     strategy.save(model_path)
     
@@ -756,7 +873,8 @@ def parse_arguments():
                         help='Mode: single strategy, comparison, or feature audit only (default: single)')
     
     parser.add_argument('--model', type=str,
-                        choices=['decision_tree', 'random_forest', 'xgboost', 'stacking', 'transformer', 'hybrid'],
+                        choices=['decision_tree', 'random_forest', 'xgboost', 'stacking', 'transformer', 'hybrid',
+                                 'bb_rsi_adx', 'tema', 'quod'],
                         default='random_forest',
                         help='Model type for single mode (default: random_forest)')
     
@@ -795,6 +913,14 @@ def parse_arguments():
     parser.add_argument('--top-features', type=int, default=None,
                         help=f'Number of top features to keep (default: {config.TOP_N_FEATURES})')
     
+    parser.add_argument('--include-momentum', action='store_true',
+                        help='Include momentum strategies (BB-RSI-ADX, TEMA, Quod) in comparison mode')
+    
+    parser.add_argument('--timeframe', 
+                        choices=['daily', '5min'], 
+                        default='daily',
+                        help='Data timeframe to use (default: daily)')
+    
     return parser.parse_args()
 
 def main():
@@ -810,7 +936,8 @@ def main():
             model_type=args.audit_model,
             top_n_features=args.top_features,
             audit_only=True,
-            symbol=args.symbol
+            symbol=args.symbol,
+            timeframe=args.timeframe
         )
     elif args.mode == 'single':
         run_single_strategy(
@@ -824,7 +951,8 @@ def main():
             use_optimized_params=args.use_optimized,
             run_feature_audit_flag=args.feature_audit,
             audit_model=args.audit_model,
-            top_n_features=args.top_features
+            top_n_features=args.top_features,
+            timeframe=args.timeframe
         )
     else:  # compare mode
         run_strategy_comparison(
@@ -835,7 +963,9 @@ def main():
             use_optimized_params=args.use_optimized,
             run_feature_audit_flag=args.feature_audit,
             audit_model=args.audit_model,
-            top_n_features=args.top_features
+            top_n_features=args.top_features,
+            include_momentum=args.include_momentum,
+            timeframe=args.timeframe
         )
 
 if __name__ == "__main__":

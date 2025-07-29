@@ -1,7 +1,7 @@
 # DecisionTree Project Context for Claude
 
 ## Project Overview
-The DecisionTree project is a hybrid ML trading system that combines traditional machine learning models (Decision Trees, Random Forest, XGBoost) with transformer-based deep learning for stock price prediction and trading signal generation.
+The DecisionTree project is a hybrid ML trading system that combines traditional machine learning models (Decision Trees, Random Forest, XGBoost) with transformer-based deep learning for stock price prediction and trading signal generation. The system now includes sophisticated momentum strategies and a meta-strategy framework for intelligent strategy orchestration.
 
 **Primary Goal**: Achieve v0.2 performance targets:
 - Annual Return: 20%
@@ -10,6 +10,7 @@ The DecisionTree project is a hybrid ML trading system that combines traditional
 
 **Current Status**: 
 - Best Sharpe: 1.53 (Quod strategy on 5-minute data) ✅
+- Meta-strategy framework implemented with performance tracking ✅
 - ML strategies need optimization for intraday data
 - Momentum strategies excel on 5-minute timeframe
 
@@ -33,8 +34,16 @@ DecisionTree/
 │   │       ├── stacking_model.py     # Stacking ensemble
 │   │       └── hybrid_strategy.py    # Hybrid model combining approaches
 │   ├── strategies/
+│   │   ├── base_strategy.py         # Enhanced base class with adapter support
 │   │   ├── trend_following.py       # Main trading strategy
-│   │   └── regime_adaptive_strategy.py # Regime-based adaptive strategy
+│   │   ├── regime_adaptive_strategy.py # Regime-based adaptive strategy
+│   │   ├── meta_strategy.py         # Meta-strategy for dynamic strategy selection
+│   │   ├── strategy_registry.py     # Registry pattern for strategy management
+│   │   └── adapters/
+│   │       ├── __init__.py
+│   │       ├── bbrsiadx_adapter.py  # BB-RSI-ADX momentum adapter
+│   │       ├── tema_adapter.py      # TEMA trend following adapter
+│   │       └── quod_adapter.py      # Quod mean reversion adapter
 │   ├── features/
 │   │   ├── feature_engineering.py   # Feature creation and scaling
 │   │   └── indicators.py            # Technical indicators
@@ -75,6 +84,15 @@ DecisionTree/
 - **Solution**: Timeframe-aware calculations (19,656 periods/year for 5-min)
 - **Impact**: Accurate performance measurement across all timeframes
 
+### 4. Meta-Strategy Framework ✅
+- **Achievement**: Dynamic strategy selection based on performance
+- **Components**: 
+  - MetaStrategy class with performance tracking
+  - Strategy switching with cooldown periods
+  - Performance window optimization (390 bars for 5-min data)
+  - Registry-based performance statistics
+- **Impact**: Foundation for intelligent strategy orchestration
+
 ## Key Technical Details
 
 ### Models/Strategies Available
@@ -84,6 +102,9 @@ DecisionTree/
    - BB-RSI-ADX: 1.40 Sharpe on 5-min data
    - TEMA: 0.76 Sharpe on 5-min data  
    - Quod: 1.53 Sharpe on 5-min data ✅
+4. **Meta-Strategy**: Dynamic selection between strategies based on:
+   - Performance-based selection (default): Tracks Sharpe ratio over rolling window
+   - Regime-based selection (planned): Maps market regimes to optimal strategies
 
 ### Supported Timeframes
 1. **Daily**: Traditional ML models trained on this
@@ -115,25 +136,36 @@ TRANSACTION_COST = 0.001  # 0.1% per trade
 ## Main Issues to Address
 1. **ML Strategy Optimization**: Need to retrain for 5-minute data patterns
 2. **Trading-Focused Optimization**: Use Sharpe ratio instead of accuracy
-3. **Hybrid Approaches**: Combine ML with momentum strategies
-4. **Ensemble Methods**: Multi-timeframe and multi-strategy combinations
+3. **Regime Detection**: Implement regime-based strategy selection for meta-strategy
+4. **Meta-Strategy Optimization**: Fine-tune performance window and switching parameters
 
 ## Next Steps (Priority Order)
 
-### 1. ML Strategy Optimization for 5-Minute Data (HIGH) 
-Retrain ML models with intraday-specific features and shorter lookback periods
+### 1. Test and Optimize Meta-Strategy (IMMEDIATE)
+- Run comprehensive tests with performance tracking enabled
+- Fine-tune performance window (currently 390 bars)
+- Optimize switch cooldown (currently 78 bars)
+- Validate strategy switching behavior
 
-### 2. Hybrid ML-Momentum Strategies (HIGH)
-Combine ML predictions with momentum signals for robust performance
+### 2. Implement Regime-Based Selection (HIGH)
+- Complete regime detection integration in meta-strategy
+- Map regimes to optimal strategies based on historical performance
+- Test regime-based vs performance-based selection
 
-### 3. Trading-Focused Optimization (HIGH)
-Replace accuracy with Sharpe ratio in hyperparameter optimization
+### 3. ML Strategy Optimization for 5-Minute Data (HIGH) 
+- Retrain ML models with intraday-specific features
+- Use shorter lookback periods appropriate for 5-min data
+- Implement trading-focused optimization (Sharpe ratio)
 
-### 4. Ensemble of Timeframes (MEDIUM)
-Combine signals from multiple timeframes (5min, 15min, 1h, daily)
+### 4. Meta-Strategy Enhancements (MEDIUM)
+- Add parallel strategy tracking (Option 1) for better learning
+- Implement strategy confidence weighting
+- Add transaction cost awareness to switching logic
 
-### 5. Regime-Aware Strategy Selection (MEDIUM)
-Dynamically select strategy based on market conditions
+### 5. Production Readiness (MEDIUM)
+- Add real-time performance monitoring
+- Implement strategy health checks
+- Create automated retraining pipeline
 
 ## Command Examples
 
@@ -147,6 +179,9 @@ python strategy_runner.py --data data/raw --mode compare --include-momentum --ou
 ```bash
 # Test single momentum strategy
 python strategy_runner.py --data data/raw --model quod --mode single --output quod_5min --timeframe 5min
+
+# Test meta-strategy with performance tracking
+python strategy_runner.py --data data/raw --model meta_strategy --mode single --output meta_test --timeframe 5min
 
 # Compare all strategies on 5-minute data
 python strategy_runner.py --data data/raw --mode compare --include-momentum --output 5min_comparison --timeframe 5min
@@ -176,8 +211,12 @@ These contain sophisticated momentum strategies that could significantly enhance
 2. The system supports both daily and 5-minute SPY data
 3. Transaction costs: 0.1% (daily), 0.05% (5-minute)
 4. Quod strategy achieved 1.53 Sharpe ratio, exceeding v0.2 target
-5. ML strategies need retraining for 5-minute data patterns
-6. Momentum strategies work best on intraday timeframes
+5. Meta-strategy framework implemented with:
+   - Performance tracking (390-bar window for 5-min data)
+   - Dynamic strategy switching (78-bar cooldown)
+   - Registry-based performance management
+6. ML strategies need retraining for 5-minute data patterns
+7. Momentum strategies work best on intraday timeframes
 
 ## Quick Reference for Common Tasks
 

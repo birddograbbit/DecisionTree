@@ -1,9 +1,9 @@
 # Next Steps for DecisionTree Hybrid System Optimization
 
 ## Executive Summary
-After implementing the Strategy Adapter Pattern and 5-minute data support, momentum strategies show significant performance improvements. The system now has flexible architecture for testing sophisticated strategies across multiple timeframes. Latest results show Quod strategy achieving 1.53 Sharpe ratio on 5-minute data, exceeding our v0.2 target of 0.75.
+After implementing the Strategy Adapter Pattern, 5-minute data support, and meta-strategy framework, the system demonstrates sophisticated strategy orchestration capabilities. Momentum strategies show significant performance improvements, with Quod achieving 1.53 Sharpe ratio on 5-minute data, exceeding our v0.2 target of 0.75. The meta-strategy now provides intelligent dynamic selection between strategies based on performance tracking.
 
-## Current Performance Status (July 28, 2025)
+## Current Performance Status (July 29, 2025)
 
 ### Daily Data Results
 - **Decision Tree**: -38.44% return, -19.36 Sharpe, 699 trades
@@ -16,12 +16,14 @@ After implementing the Strategy Adapter Pattern and 5-minute data support, momen
 - **BB-RSI-ADX**: 8.25% return, 1.40 Sharpe, 935 trades ✅
 - **TEMA**: 5.81% return, 0.76 Sharpe, 1,904 trades ✅
 - **Quod**: 14.98% return, 1.53 Sharpe, 3,195 trades ✅✅
+- **Meta-Strategy**: Initial implementation complete, performance tracking active 🚀
 
 ### Key Findings
 1. **Momentum strategies excel on 5-minute data** - All three momentum strategies achieve positive returns and Sharpe ratios
 2. **Quod strategy exceeds v0.2 target** - 1.53 Sharpe ratio surpasses our 0.75 goal
-3. **Trading frequency dramatically increased** - From 5-6 trades to thousands with intraday data
-4. **ML strategies need optimization** - Still showing negative performance on both timeframes
+3. **Meta-strategy framework operational** - Dynamic strategy selection with performance tracking implemented
+4. **Trading frequency dramatically increased** - From 5-6 trades to thousands with intraday data
+5. **ML strategies need optimization** - Still showing negative performance on both timeframes
 
 ## Full Operational Procedures
 
@@ -49,6 +51,9 @@ python strategy_runner.py --data data/raw --mode compare --include-momentum --ou
 
 # Test specific momentum strategy
 python strategy_runner.py --data data/raw --model quod --mode single --output quod_5min --timeframe 5min
+
+# Test meta-strategy with performance tracking
+python strategy_runner.py --data data/raw --model meta_strategy --mode single --output meta_5min --timeframe 5min
 ```
 
 #### 3. Performance Validation Checklist
@@ -83,6 +88,12 @@ python strategy_runner.py --data data/raw --model quod --mode single --output qu
    - Stochastic reversal and pullback patterns
    - Best for: Mean reversion within trends
 
+4. **Meta-Strategy** (`--model meta_strategy`)
+   - Dynamic selection between strategies based on performance
+   - Performance window: 390 bars (5 days for 5-min data)
+   - Switch cooldown: 78 bars (1 day for 5-min data)
+   - Best for: Adaptive strategy selection to maximize Sharpe ratio
+
 ## Completed Implementations (July 2025)
 
 ### 1. Strategy Adapter Pattern ✅
@@ -103,9 +114,43 @@ python strategy_runner.py --data data/raw --model quod --mode single --output qu
 - Updated holding period calculations
 - Simplified transaction cost modeling
 
+### 4. Meta-Strategy Framework ✅
+- Dynamic strategy selection based on performance tracking
+- Configurable performance window and switch cooldown
+- Registry-based performance statistics
+- Foundation for regime-based selection
+
 ## Recommended Next Steps (Priority Order)
 
-### 1. ML Strategy Optimization for 5-Minute Data (HIGH PRIORITY)
+### 1. Test and Optimize Meta-Strategy (IMMEDIATE PRIORITY)
+**Problem**: Meta-strategy implemented but needs validation and tuning.
+
+**Solution**: Comprehensive testing and parameter optimization
+```bash
+# Test meta-strategy performance
+python strategy_runner.py --data data/raw --model meta_strategy --mode single --output meta_test --timeframe 5min
+
+# Compare with individual strategies
+python strategy_runner.py --data data/raw --mode compare --include-momentum --output meta_comparison --timeframe 5min
+```
+
+**Optimization targets**:
+- Performance window: Test 195 (2.5 days), 390 (5 days), 780 (10 days)
+- Switch cooldown: Test 39 (0.5 days), 78 (1 day), 156 (2 days)
+- Validate switching behavior and performance improvement
+
+### 2. Implement Regime-Based Selection (HIGH PRIORITY)
+**Problem**: Performance-based selection may lag in regime changes.
+
+**Solution**: Complete regime detection integration
+```python
+# Enhance meta_strategy.py with regime detection
+- Use existing RegimeDetector from features/regime_detection.py
+- Test regime mapping effectiveness
+- Compare regime-based vs performance-based selection
+```
+
+### 3. ML Strategy Optimization for 5-Minute Data (HIGH PRIORITY)
 **Problem**: ML strategies show poor performance on both daily and 5-minute data.
 
 **Solution**: Retrain and optimize for intraday patterns
@@ -122,7 +167,7 @@ python strategy_runner.py --data data/raw --model quod --mode single --output qu
 - More emphasis on recent price action
 ```
 
-### 2. Hybrid ML-Momentum Strategies (HIGH PRIORITY)
+### 4. Hybrid ML-Momentum Strategies (MEDIUM PRIORITY)
 **Problem**: ML and momentum strategies have complementary strengths.
 
 **Solution**: Combine ML predictions with momentum signals
@@ -151,7 +196,7 @@ class HybridMomentumML(BaseStrategy):
         return combined_signals
 ```
 
-### 3. Trading-Focused Hyperparameter Optimization (HIGH PRIORITY)
+### 5. Trading-Focused Hyperparameter Optimization (MEDIUM PRIORITY)
 **Problem**: Current optimization uses accuracy, not trading metrics.
 
 **Solution**: Optimize directly for Sharpe ratio
@@ -175,7 +220,7 @@ def objective(trial):
     return backtest_results['performance']['sharpe_ratio']
 ```
 
-### 4. Ensemble of Timeframes (MEDIUM PRIORITY)
+### 6. Ensemble of Timeframes (LOW PRIORITY)
 **Problem**: Different timeframes capture different market dynamics.
 
 **Solution**: Combine signals from multiple timeframes
@@ -192,48 +237,25 @@ for tf in timeframes:
 final_signal = np.mean(all_signals, axis=0)
 ```
 
-### 5. Regime-Aware Strategy Selection (MEDIUM PRIORITY)
-**Problem**: Different strategies work better in different market conditions.
-
-**Solution**: Dynamically select strategy based on market regime
-```python
-class RegimeAwareSelector:
-    def __init__(self, strategies):
-        self.strategies = strategies
-        self.regime_detector = MarketRegimeDetector()
-    
-    def select_strategy(self, market_data):
-        regime = self.regime_detector.detect(market_data)
-        
-        if regime == 'trending':
-            return self.strategies['tema']  # Trend following
-        elif regime == 'ranging':
-            return self.strategies['quod']  # Mean reversion
-        elif regime == 'volatile':
-            return self.strategies['bb_rsi_adx']  # Momentum
-        else:
-            return self.strategies['ensemble']  # Default
-```
-
 ## Implementation Timeline
 
-### Week 1: ML Strategy Optimization
+### Week 1: Meta-Strategy Optimization (Current)
+1. Test meta-strategy with various parameter configurations
+2. Implement regime-based selection
+3. Compare performance vs individual strategies
+4. Fine-tune switching parameters
+
+### Week 2: ML Strategy Enhancement
 1. Add intraday-specific features
 2. Retrain ML models on 5-minute data
 3. Implement Sharpe-focused optimization
-4. Test performance improvements
+4. Test ML performance improvements
 
-### Week 2: Hybrid Strategies
-1. Create ML-momentum hybrid framework
-2. Test different combination methods
-3. Optimize weighting schemes
-4. Validate on out-of-sample data
-
-### Week 3: Advanced Techniques
-1. Implement multi-timeframe ensemble
-2. Build regime detection system
-3. Create dynamic strategy selector
-4. Comprehensive backtesting
+### Week 3: Production Readiness
+1. Add real-time performance monitoring
+2. Implement strategy health checks
+3. Create automated retraining pipeline
+4. Comprehensive system testing
 
 ## Success Metrics
 - **Primary**: Achieve consistent Sharpe > 1.0 across strategies
@@ -274,7 +296,7 @@ python strategy_runner.py --data data/raw --mode audit --audit-model random_fore
 3. **ML Needs Adaptation**: Current ML models trained on daily patterns need retraining for intraday dynamics
 4. **Achieved Goal**: Quod strategy's 1.53 Sharpe exceeds our 0.75 target
 
-## Project Status Summary (Updated July 28, 2025)
+## Project Status Summary (Updated July 29, 2025)
 
 ### Completed Work
 1. **Strategy Adapter Pattern** ✅
@@ -292,17 +314,25 @@ python strategy_runner.py --data data/raw --mode audit --audit-model random_fore
    - Sharpe ratio annualization
    - Holding period tracking
 
+4. **Meta-Strategy Framework** ✅
+   - Dynamic strategy selection
+   - Performance tracking implementation
+   - Configurable switching parameters
+   - Foundation for intelligent orchestration
+
 ### Current Capabilities
-- **8 strategies**: decision_tree, random_forest, xgboost, regime_adaptive, bb_rsi_adx, tema, quod, stacking
+- **9 strategies**: decision_tree, random_forest, xgboost, regime_adaptive, bb_rsi_adx, tema, quod, stacking, meta_strategy
 - **2 timeframes**: daily and 5-minute
-- **Advanced features**: Multi-timeframe analysis, order management, registry pattern
+- **Advanced features**: Multi-timeframe analysis, order management, registry pattern, dynamic strategy selection
 - **Performance**: Quod achieves 1.53 Sharpe on 5-minute data
+- **Meta-Strategy**: Performance-based strategy switching with configurable parameters
 
 ### Next Phase Focus
-1. Optimize ML strategies for 5-minute data
-2. Create hybrid ML-momentum approaches  
-3. Implement ensemble techniques
-4. Build production-ready system
+1. Test and optimize meta-strategy performance
+2. Implement regime-based strategy selection
+3. Optimize ML strategies for 5-minute data
+4. Build production-ready system with monitoring
+
 
 ## Conclusion
-The system has successfully demonstrated that sophisticated momentum strategies can achieve the v0.2 performance targets when applied to appropriate timeframe data. The next phase focuses on bringing ML strategies up to similar performance levels and creating robust ensemble approaches for consistent results.
+The system has successfully demonstrated that sophisticated momentum strategies can achieve the v0.2 performance targets when applied to appropriate timeframe data. With the meta-strategy framework now implemented, the system can intelligently orchestrate multiple strategies to potentially achieve even better risk-adjusted returns. The next phase focuses on optimizing the meta-strategy parameters, implementing regime-based selection, and bringing ML strategies up to similar performance levels for a comprehensive trading system.

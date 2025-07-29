@@ -6,6 +6,7 @@ enabling easy addition of new strategies and dynamic strategy selection.
 """
 
 import logging
+import numpy as np
 from typing import Dict, Type, Optional, List
 from src.strategies.base_strategy import BaseStrategy
 from src.strategies.trend_following import TrendFollowingStrategy
@@ -41,6 +42,9 @@ class StrategyRegistry:
         'regime': 'regime_adaptive',
         'adaptive': 'regime_adaptive',
     }
+    
+    # Performance tracking for strategies (optional)
+    _performance_tracking: Dict[str, List[float]] = {}
     
     @classmethod
     def register_strategy(cls, name: str, strategy_class: Type[BaseStrategy], 
@@ -200,6 +204,84 @@ class StrategyRegistry:
         except Exception as e:
             logger.error(f"Configuration validation failed: {e}")
             return False
+    
+    @classmethod
+    def create_strategy(cls, name: str, config: Optional[Dict] = None) -> BaseStrategy:
+        """
+        Create a strategy instance (alias for get_strategy).
+        
+        Parameters:
+        -----------
+        name : str
+            Strategy name or alias
+        config : dict, optional
+            Configuration for strategy initialization
+            
+        Returns:
+        --------
+        BaseStrategy
+            Initialized strategy instance
+        """
+        return cls.get_strategy(name, config)
+    
+    @classmethod
+    def track_performance(cls, strategy_name: str, returns: List[float]) -> None:
+        """
+        Track performance data for a strategy.
+        
+        Parameters:
+        -----------
+        strategy_name : str
+            Name of the strategy
+        returns : List[float]
+            Returns to track
+        """
+        if strategy_name not in cls._performance_tracking:
+            cls._performance_tracking[strategy_name] = []
+        
+        cls._performance_tracking[strategy_name].extend(returns)
+        
+        # Keep only recent history (last 1000 data points)
+        if len(cls._performance_tracking[strategy_name]) > 1000:
+            cls._performance_tracking[strategy_name] = cls._performance_tracking[strategy_name][-1000:]
+    
+    @classmethod
+    def get_performance_stats(cls, strategy_name: str, window: int = 100) -> Dict[str, float]:
+        """
+        Get performance statistics for a strategy.
+        
+        Parameters:
+        -----------
+        strategy_name : str
+            Name of the strategy
+        window : int
+            Number of recent returns to analyze
+            
+        Returns:
+        --------
+        Dict[str, float]
+            Performance statistics
+        """
+        if strategy_name not in cls._performance_tracking:
+            return {}
+        
+        returns = cls._performance_tracking[strategy_name]
+        if len(returns) < window:
+            return {'data_points': len(returns), 'insufficient_data': True}
+        
+        recent_returns = returns[-window:]
+        
+        stats = {
+            'mean_return': np.mean(recent_returns),
+            'std_return': np.std(recent_returns),
+            'sharpe_ratio': np.mean(recent_returns) / np.std(recent_returns) * np.sqrt(252) if np.std(recent_returns) > 0 else 0,
+            'win_rate': sum(1 for r in recent_returns if r > 0) / len(recent_returns),
+            'max_return': max(recent_returns),
+            'min_return': min(recent_returns),
+            'data_points': len(recent_returns)
+        }
+        
+        return stats
 
 
 # Convenience function for backward compatibility

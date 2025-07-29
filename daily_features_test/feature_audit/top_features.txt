@@ -1,0 +1,10 @@
+sma_ratio
+atr_zscore
+rsi
+adx_momentum
+stoch_k
+macd
+std
+adx
+price_momentum_5d
+atr

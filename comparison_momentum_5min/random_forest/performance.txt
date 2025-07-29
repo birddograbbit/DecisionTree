@@ -1,0 +1,17 @@
+Performance Summary for Random Forest:
+total_return: 3.52%
+ann_return: 3.88%
+ann_volatility: 6.30%
+sharpe_ratio: 0.2986
+max_drawdown: 8.11%
+cagr_dd_ratio: 0.4783
+num_trades: 4.0000
+win_rate: 50.00%
+profit_factor: 1.6559
+avg_win: 5056.4792
+avg_loss: -3053.5662
+avg_holding_period: 3541.4844
+accuracy: nan
+precision: nan
+recall: nan
+f1: nan

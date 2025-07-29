@@ -1,0 +1,8 @@
+Performance Summary for BB-RSI-ADX Momentum (5min):
+total_return: 8.25%
+ann_return: 9.09%
+sharpe_ratio: 1.3957
+max_drawdown: -3.46%
+num_trades: 935
+win_rate: 51.22%
+strategy: BB-RSI-ADX

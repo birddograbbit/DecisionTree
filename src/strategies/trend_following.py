@@ -232,7 +232,7 @@ class TrendFollowingStrategy(BaseStrategy):
         
         return signals, predictions
 
-    def backtest(self, data, train_data=None, test_data=None):
+    def backtest(self, data, train_data=None, test_data=None, timeframe='daily'):
         """
         Run backtest for the strategy.
         
@@ -244,6 +244,8 @@ class TrendFollowingStrategy(BaseStrategy):
             Training data (if None, uses 70% of data)
         test_data : pd.DataFrame, optional
             Testing data (if None, uses 30% of data)
+        timeframe : str, default='daily'
+            Trading timeframe ('daily', '5min', '5T')
             
         Returns:
         --------
@@ -273,7 +275,7 @@ class TrendFollowingStrategy(BaseStrategy):
             slippage=self.config.get('slippage', 0.001)
         )
         
-        results = backtest_engine.run_backtest(signals, test_data_dict)
+        results = backtest_engine.run_backtest(signals, test_data_dict, timeframe)
         
         # Store metrics
         self.metrics.update(results.get('performance', {}))

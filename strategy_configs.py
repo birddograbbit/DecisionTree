@@ -319,5 +319,31 @@ STRATEGY_CONFIGS = {
     'quod': QUOD_CONFIG,
     # 5-minute momentum strategies
     'bb_rsi_adx_5min': BB_RSI_ADX_5MIN_CONFIG,
-    'tema_5min': TEMA_5MIN_CONFIG
+    'tema_5min': TEMA_5MIN_CONFIG,
+    # Meta-strategy configuration
+    'meta_strategy': {
+        'name': 'meta_strategy',
+        'model_type': None,  # Meta-strategy doesn't use ML models directly
+        'model_params': {},
+        'lookback': 20,
+        'use_momentum_features': True,
+        'use_multi_timeframe': True,
+        'timeframes': ['5min'],
+        'selection_method': 'performance',  # 'performance' or 'regime'
+        'performance_window': 390,  # 5 days for 5-minute data (78 bars/day)
+        'switch_cooldown': 78,  # 1 day cooldown for 5-minute data
+        'strategies': ['quod', 'tema', 'bb_rsi_adx'],
+        'regime_method': 'trend_volatility',
+        'regime_map': {
+            'strong_uptrend': 'tema',
+            'uptrend': 'tema',
+            'weak_uptrend': 'bb_rsi_adx',
+            'volatile_neutral': 'bb_rsi_adx',
+            'neutral': 'quod',
+            'low_vol_neutral': 'quod',
+            'weak_downtrend': 'bb_rsi_adx',
+            'downtrend': 'tema',
+            'strong_downtrend': 'tema'
+        }
+    }
 }

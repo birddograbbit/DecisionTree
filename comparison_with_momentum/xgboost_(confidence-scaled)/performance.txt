@@ -1,0 +1,17 @@
+Performance Summary for XGBoost (Confidence-Scaled):
+total_return: 13.23%
+ann_return: 1.73%
+ann_volatility: 11.12%
+sharpe_ratio: -0.0240
+max_drawdown: 24.75%
+cagr_dd_ratio: 0.0701
+num_trades: 63.0000
+win_rate: 76.19%
+profit_factor: 1.4493
+avg_win: 1432.3403
+avg_loss: -3162.5962
+avg_holding_period: 25.7460
+accuracy: nan
+precision: nan
+recall: nan
+f1: nan

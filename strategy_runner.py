@@ -359,7 +359,13 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         print(f"\n=== Running strategy: {config['name']} ===")
 
         # Determine strategy type from config name
-        if 'Regime Adaptive' in config['name']:
+        if 'meta_strategy' in config['name'].lower():
+            strategy_type = 'meta_strategy'
+            # Dynamically import and register meta-strategy if needed
+            if 'meta_strategy' not in StrategyRegistry.list_strategies():
+                from src.strategies.meta_strategy import MetaStrategy
+                StrategyRegistry.register_strategy('meta_strategy', MetaStrategy)
+        elif 'Regime Adaptive' in config['name']:
             strategy_type = 'regime_adaptive'
         elif 'BB-RSI-ADX' in config['name']:
             strategy_type = 'bb_rsi_adx'
@@ -642,8 +648,8 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     print(f"Training data: {len(train_data)} rows ({train_data.index[0]} to {train_data.index[-1]})")
     print(f"Testing data: {len(test_data)} rows ({test_data.index[0]} to {test_data.index[-1]})")
     
-    # Check if model_type is a momentum strategy
-    momentum_strategies = ['bb_rsi_adx', 'tema', 'quod']
+    # Check if model_type is a momentum strategy or meta-strategy
+    momentum_strategies = ['bb_rsi_adx', 'tema', 'quod', 'meta_strategy']
     
     if model_type in momentum_strategies:
         # For momentum strategies, use the model type as the strategy type
@@ -701,12 +707,23 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
                 'use_d60_trend_exit': True,
                 'primary_timeframe': '5T'  # 5-minute default for Quod
             })
+        elif model_type == 'meta_strategy':
+            config.update({
+                'selection_method': 'performance',
+                'performance_window': 100,
+                'switch_cooldown': 20,
+                'strategies': ['quod', 'tema', 'bb_rsi_adx']
+            })
+            # Dynamically import and register meta-strategy if needed
+            if 'meta_strategy' not in StrategyRegistry.list_strategies():
+                from src.strategies.meta_strategy import MetaStrategy
+                StrategyRegistry.register_strategy('meta_strategy', MetaStrategy)
     else:
         # Fallback to basic configuration
         config = {
             'name': model_type.title(),
             'model_type': model_type,
-            'model_params': ModelFactory.get_default_params(model_type),
+            'model_params': {} if model_type == 'meta_strategy' else ModelFactory.get_default_params(model_type),
             'use_adaptive_thresholds': 'auto'
         }
         
@@ -874,7 +891,7 @@ def parse_arguments():
     
     parser.add_argument('--model', type=str,
                         choices=['decision_tree', 'random_forest', 'xgboost', 'stacking', 'transformer', 'hybrid',
-                                 'bb_rsi_adx', 'tema', 'quod'],
+                                 'bb_rsi_adx', 'tema', 'quod', 'meta_strategy'],
                         default='random_forest',
                         help='Model type for single mode (default: random_forest)')
     

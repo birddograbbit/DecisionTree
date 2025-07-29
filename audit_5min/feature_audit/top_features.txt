@@ -1,0 +1,10 @@
+stoch_k
+macd
+plus_di
+sma_ratio
+rsi
+atr
+adx_momentum
+volume_momentum_1d
+minus_di
+bb_position

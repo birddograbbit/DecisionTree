@@ -1,0 +1,17 @@
+Performance Summary for Stacking Ensemble:
+total_return: 12.57%
+ann_return: 1.65%
+ann_volatility: 4.97%
+sharpe_ratio: -0.0702
+max_drawdown: 12.63%
+cagr_dd_ratio: 0.1307
+num_trades: 5.0000
+win_rate: 80.00%
+profit_factor: 6.8024
+avg_win: 3817.0840
+avg_loss: -2244.5493
+avg_holding_period: 218.2000
+accuracy: nan
+precision: nan
+recall: nan
+f1: nan

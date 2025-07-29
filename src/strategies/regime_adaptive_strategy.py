@@ -627,7 +627,7 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
         
         return signals, predictions
 
-    def backtest(self, data, train_data=None, test_data=None):
+    def backtest(self, data, train_data=None, test_data=None, timeframe='daily'):
         """
         Run backtest for the strategy.
         
@@ -639,6 +639,8 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
             Training data (if None, uses 70% of data)
         test_data : pd.DataFrame, optional
             Testing data (if None, uses 30% of data)
+        timeframe : str, default='daily'
+            Trading timeframe ('daily', '5min', '5T')
             
         Returns:
         --------
@@ -733,7 +735,7 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
             test_data_dict = {symbol: test_data}
             
             # Run backtest
-            backtest_results = self.backtest_engine.run_backtest(signals, test_data_dict)
+            backtest_results = self.backtest_engine.run_backtest(signals, test_data_dict, timeframe)
             
             # Add regime analysis to results
             self._add_regime_analysis(backtest_results, test_data)
@@ -777,7 +779,7 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
             test_data_dict = {symbol: test_data}
             
             # Run backtest
-            results = self.backtest_engine.run_backtest(signals, test_data_dict)
+            results = self.backtest_engine.run_backtest(signals, test_data_dict, timeframe)
             
             # Store metrics
             self.metrics.update(results.get('performance', {}))

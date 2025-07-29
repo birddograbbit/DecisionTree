@@ -152,7 +152,8 @@ class MetaStrategy(BaseStrategy):
         # Switch strategy if needed
         if selected_strategy_name != self.current_strategy_name:
             if self.bars_since_switch >= self.switch_cooldown:
-                logger.info(f"Switching strategy from {self.current_strategy_name} to {selected_strategy_name}")
+                logger.info(f"Strategy switch triggered after {self.bars_since_switch} bars")
+                logger.info(f"Switching from {self.current_strategy_name} to {selected_strategy_name}")
                 self.current_strategy_name = selected_strategy_name
                 self.current_strategy = self.available_strategies[selected_strategy_name]
                 self.bars_since_switch = 0
@@ -163,6 +164,9 @@ class MetaStrategy(BaseStrategy):
                     'strategy': selected_strategy_name,
                     'reason': self.selection_method
                 })
+            else:
+                logger.debug(f"Strategy switch to {selected_strategy_name} blocked by cooldown "
+                           f"({self.bars_since_switch}/{self.switch_cooldown} bars)")
         
         # Generate signals using current strategy
         signals = self.current_strategy.generate_signals(features, predictions, dates)
@@ -192,6 +196,8 @@ class MetaStrategy(BaseStrategy):
         str
             Name of selected strategy
         """
+        logger.debug(f"Selecting strategy using method: {self.selection_method}")
+        
         if self.selection_method == 'performance':
             return self._select_by_performance()
         elif self.selection_method == 'regime':
@@ -212,20 +218,29 @@ class MetaStrategy(BaseStrategy):
         # Get performance stats from registry
         best_sharpe = -np.inf
         best_strategy = self.current_strategy_name
+        strategy_stats = {}
         
         for name in self.available_strategies:
             stats = self.registry.get_performance_stats(name, self.performance_window)
             
             # Skip if insufficient data
             if stats.get('insufficient_data', True):
+                logger.debug(f"Strategy {name}: Insufficient data for performance evaluation")
                 continue
             
             sharpe = stats.get('sharpe_ratio', 0)
+            strategy_stats[name] = sharpe
+            
             if sharpe > best_sharpe:
                 best_sharpe = sharpe
                 best_strategy = name
-                
-                logger.info(f"Strategy {name} has best Sharpe: {sharpe:.2f}")
+        
+        # Log all strategy performances
+        if strategy_stats:
+            logger.info(f"Strategy performance comparison: {strategy_stats}")
+            logger.info(f"Selected strategy: {best_strategy} with Sharpe: {best_sharpe:.2f}")
+        else:
+            logger.warning("No strategies have sufficient performance data")
         
         return best_strategy
     
@@ -287,47 +302,72 @@ class MetaStrategy(BaseStrategy):
                 self.strategy_performance[strategy_name] = \
                     self.strategy_performance[strategy_name][-max_history:]
     
-    def _initialize_performance_tracking(self, init_data: pd.DataFrame):
+    def _run_strategy_backtest(self, strategy_name: str, strategy: BaseStrategy, 
+                               data: pd.DataFrame, timeframe: str = 'daily') -> Dict[str, float]:
         """
-        Initialize performance tracking by running all strategies on initial data.
+        Run a backtest for a single strategy and return performance metrics.
         
         Parameters:
         -----------
-        init_data : pd.DataFrame
-            Initial data window for performance initialization
+        strategy_name : str
+            Name of the strategy
+        strategy : BaseStrategy
+            Strategy instance
+        data : pd.DataFrame
+            Price data for backtesting
+        timeframe : str
+            Trading timeframe
+            
+        Returns:
+        --------
+        Dict[str, float]
+            Performance metrics including returns and sharpe ratio
         """
-        logger.info(f"Initializing performance tracking with {len(init_data)} bars")
-        
-        # Run each strategy on the initialization window
-        for name, strategy in self.available_strategies.items():
-            try:
-                # Generate features
-                X, y, dates = strategy.generate_features(init_data)
-                
-                if len(X) == 0:
-                    continue
-                
-                # Generate signals
-                predictions = np.zeros(len(X))  # Dummy predictions
-                signals = strategy.generate_signals(X, predictions, dates)
-                
-                # Simulate returns (simplified)
-                if len(signals) > 0:
-                    # Calculate returns based on signal positions
-                    returns = []
-                    for i in range(1, len(init_data)):
-                        if i < len(signals) and signals.iloc[i-1]['signal'] != 0:
-                            ret = init_data.iloc[i]['close'] / init_data.iloc[i-1]['close'] - 1
-                            returns.append(ret * signals.iloc[i-1]['signal'])
-                        else:
-                            returns.append(0)
-                    
-                    # Track performance
-                    self.registry.track_performance(name, returns)
-                    logger.info(f"Initialized {name} with {len(returns)} returns")
-                    
-            except Exception as e:
-                logger.error(f"Error initializing performance for {name}: {e}")
+        try:
+            # Generate features and signals
+            X, y, dates = strategy.generate_features(data)
+            if len(X) == 0:
+                return {'returns': 0, 'sharpe_ratio': 0, 'num_trades': 0}
+            
+            predictions = np.zeros(len(X))  # Dummy predictions for momentum strategies
+            signals = strategy.generate_signals(X, predictions, dates)
+            
+            if len(signals) == 0:
+                return {'returns': 0, 'sharpe_ratio': 0, 'num_trades': 0}
+            
+            # Ensure signals doesn't have date as both index and column
+            if 'date' in signals.columns and signals.index.name == 'date':
+                signals = signals.reset_index(drop=True)
+            
+            # Run simplified backtest to get performance
+            from src.backtesting.engine import BacktestEngine
+            backtest_engine = BacktestEngine(
+                initial_capital=100000,
+                commission=0.001,
+                slippage=0.001
+            )
+            
+            # Make sure data doesn't have date as both index and column
+            data_for_backtest = data.copy()
+            if 'date' in data_for_backtest.columns and data_for_backtest.index.name == 'date':
+                data_for_backtest = data_for_backtest.reset_index(drop=True)
+            
+            results = backtest_engine.run_backtest(
+                signals, 
+                {self.config.get('symbol', 'SPY'): data_for_backtest}, 
+                timeframe
+            )
+            
+            performance = results.get('performance', {})
+            return {
+                'returns': performance.get('total_return', 0),
+                'sharpe_ratio': performance.get('sharpe_ratio', 0),
+                'num_trades': performance.get('num_trades', 0)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error running backtest for {strategy_name}: {e}")
+            return {'returns': 0, 'sharpe_ratio': 0, 'num_trades': 0}
     
     def get_metrics(self) -> dict:
         """
@@ -408,11 +448,30 @@ class MetaStrategy(BaseStrategy):
         # Train all strategies
         self.train(train_data)
         
-        # Initialize performance by running all strategies on a small initial window
-        if self.selection_method == 'performance':
-            self._initialize_performance_tracking(test_data[:self.performance_window * 2])
+        # Initialize performance tracking
+        logger.info("Initializing strategy performance with warm-up period")
         
-        # Run backtest with performance tracking
+        # Use sufficient data for warm-up to fill performance window
+        warmup_size = min(self.performance_window + 100, int(len(test_data) * 0.3))
+        warmup_data = test_data.iloc[:warmup_size]
+        remaining_test_data = test_data.iloc[warmup_size:]
+        
+        # Run warm-up backtests for all strategies
+        logger.info(f"Running warm-up period with {warmup_size} bars")
+        for name, strategy in self.available_strategies.items():
+            metrics = self._run_strategy_backtest(name, strategy, warmup_data, timeframe)
+            
+            # Initialize performance tracking with warm-up results
+            # Always track performance, even if sharpe is 0 or negative
+            # Convert total return to daily returns approximation
+            if warmup_size > 0:
+                daily_return = metrics['returns'] / 100 / warmup_size  # Convert percentage to decimal daily
+                warmup_returns = [daily_return] * warmup_size
+                self.registry.track_performance(name, warmup_returns)
+                logger.info(f"Warm-up {name}: Sharpe={metrics['sharpe_ratio']:.2f}, "
+                           f"Return={metrics['returns']:.2f}%, Trades={metrics['num_trades']}")
+        
+        # Now run the actual backtest on remaining data
         from src.backtesting.engine import BacktestEngine
         
         backtest_engine = BacktestEngine(
@@ -421,41 +480,17 @@ class MetaStrategy(BaseStrategy):
             slippage=self.config.get('slippage', 0.001)
         )
         
-        # Generate signals with dynamic strategy selection
+        # Generate signals for the remaining test data
         all_signals = []
-        window_size = self.performance_window if self.selection_method == 'performance' else len(test_data)
         
-        # Process data in windows for performance tracking
-        for i in range(0, len(test_data), window_size):
-            window_end = min(i + window_size, len(test_data))
-            window_data = test_data.iloc[i:window_end]
+        # Process entire remaining data as one chunk for simplicity
+        if len(remaining_test_data) > 10:
+            X, y, dates = self.generate_features(remaining_test_data)
             
-            if len(window_data) < 10:  # Skip small windows
-                continue
-            
-            # Generate features for window
-            X, y, dates = self.generate_features(window_data)
-            
-            if len(X) == 0:
-                continue
-            
-            # Generate signals using meta-strategy selection
-            predictions = np.zeros(len(X))  # Dummy predictions for momentum strategies
-            signals = self.generate_signals(X, predictions, dates)
-            
-            # Track performance if we have enough history
-            if self.selection_method == 'performance' and i > 0:
-                # Calculate returns for the previous window
-                prev_window_start = max(0, i - window_size)
-                prev_window_data = test_data.iloc[prev_window_start:i]
-                
-                if len(prev_window_data) > 1:
-                    returns = prev_window_data['close'].pct_change().dropna().tolist()
-                    
-                    # Update performance for the strategy that was used
-                    self.registry.track_performance(self.current_strategy_name, returns)
-            
-            all_signals.append(signals)
+            if len(X) > 0:
+                predictions = np.zeros(len(X))
+                signals = self.generate_signals(X, predictions, dates)
+                all_signals.append(signals)
         
         # Combine all signals
         if all_signals:

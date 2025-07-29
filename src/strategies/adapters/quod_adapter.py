@@ -458,7 +458,7 @@ class QuodAdapter(BaseStrategy):
         df['d60_trend'] = np.where(df['close'] > df['d60_sma'], 1, -1)
         
         # D60 slope (trend strength)
-        df['d60_slope'] = df['d60_sma'].pct_change(10)  # 10-period rate of change
+        df['d60_slope'] = df['d60_sma'].ffill().pct_change(10)  # 10-period rate of change
         
         return df
     

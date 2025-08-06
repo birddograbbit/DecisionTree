@@ -1,0 +1,17 @@
+Performance Summary for Decision Tree (Calibrated):
+total_return: 41.96%
+ann_return: 4.97%
+ann_volatility: 8.05%
+sharpe_ratio: 0.3685
+max_drawdown: 16.67%
+cagr_dd_ratio: 0.2979
+num_trades: 5.0000
+win_rate: 80.00%
+profit_factor: 59.9722
+avg_win: 10819.7403
+avg_loss: -721.6503
+avg_holding_period: 391.8000
+accuracy: nan
+precision: nan
+recall: nan
+f1: nan

@@ -44,7 +44,7 @@ class BacktestEngine:
         self.trades = []
         self.equity_curve = []
         
-    def run_backtest(self, signals, data):
+    def run_backtest(self, signals, data, timeframe='daily'):
         """
         Run backtest with given signals and price data.
         
@@ -55,6 +55,8 @@ class BacktestEngine:
         data : dict or pd.DataFrame
             If dict: mapping symbols to price DataFrames
             If DataFrame: price data for a single symbol
+        timeframe : str, default='daily'
+            Trading timeframe ('daily', '5min', '5T')
             
         Returns:
         --------
@@ -135,6 +137,16 @@ class BacktestEngine:
                     proceeds = position_size * price * (1 - self.slippage) * (1 - self.commission)
                     self.capital += proceeds
                     
+                    # Calculate holding period
+                    if timeframe in ['5min', '5T', '5m']:
+                        # For 5-minute data, calculate holding period in bars
+                        time_diff = date - entry_date
+                        holding_days = time_diff.days + time_diff.seconds / 86400.0  # Include intraday component
+                        holding_bars = int(holding_days * 78)  # 78 bars per day
+                    else:
+                        holding_days = (date - entry_date).days
+                        holding_bars = holding_days
+                    
                     # Record trade
                     self.trades.append({
                         'symbol': symbol,
@@ -145,7 +157,8 @@ class BacktestEngine:
                         'size': position_size,
                         'pnl': proceeds - (position_size * entry_price),
                         'return': (price / entry_price) - 1,
-                        'holding_days': (date - entry_date).days
+                        'holding_days': holding_days,
+                        'holding_bars': holding_bars
                     })
                     
                     # Remove position
@@ -176,6 +189,16 @@ class BacktestEngine:
             proceeds = position_size * exit_price * (1 - self.slippage) * (1 - self.commission)
             self.capital += proceeds
             
+            # Calculate holding period
+            if timeframe in ['5min', '5T', '5m']:
+                # For 5-minute data, calculate holding period in bars
+                time_diff = last_date - entry_date
+                holding_days = time_diff.days + time_diff.seconds / 86400.0  # Include intraday component
+                holding_bars = int(holding_days * 78)  # 78 bars per day
+            else:
+                holding_days = (last_date - entry_date).days
+                holding_bars = holding_days
+            
             # Record trade
             self.trades.append({
                 'symbol': symbol,
@@ -186,7 +209,8 @@ class BacktestEngine:
                 'size': position_size,
                 'pnl': proceeds - (position_size * entry_price),
                 'return': (exit_price / entry_price) - 1,
-                'holding_days': (last_date - entry_date).days
+                'holding_days': holding_days,
+                'holding_bars': holding_bars
             })
             
             # Remove position
@@ -199,7 +223,7 @@ class BacktestEngine:
         
         # Calculate performance metrics
         from src.backtesting.performance import calculate_performance_metrics
-        performance = calculate_performance_metrics(self.equity_curve, self.trades)
+        performance = calculate_performance_metrics(self.equity_curve, self.trades, timeframe)
         
         # Prepare results
         results = {

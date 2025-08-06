@@ -322,3 +322,147 @@ def calculate_stochastic(df, k_period=14, d_period=3):
     d = k.rolling(window=d_period).mean()
     
     return k, d
+
+def calculate_supertrend(df, period=10, multiplier=3):
+    """
+    Calculate Supertrend indicator.
+    
+    Supertrend is a trend-following indicator that uses ATR to set
+    dynamic support and resistance levels.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        Price data with columns: high, low, close
+    period : int
+        ATR period (default: 10)
+    multiplier : float
+        ATR multiplier (default: 3)
+        
+    Returns:
+    --------
+    pd.DataFrame
+        DataFrame with columns: supertrend, direction
+        direction: 1 for uptrend, -1 for downtrend
+    """
+    # Calculate ATR
+    atr = calculate_atr(df, window=period)
+    
+    # Calculate basic bands
+    hl_avg = (df['high'] + df['low']) / 2
+    upper_band = hl_avg + (multiplier * atr)
+    lower_band = hl_avg - (multiplier * atr)
+    
+    # Initialize supertrend
+    supertrend = pd.Series(index=df.index, dtype=float)
+    direction = pd.Series(index=df.index, dtype=int)
+    
+    # Calculate supertrend
+    for i in range(period, len(df)):
+        # Current close
+        curr_close = df['close'].iloc[i]
+        
+        # Previous values
+        if i == period:
+            # First calculation
+            if curr_close <= upper_band.iloc[i]:
+                supertrend.iloc[i] = upper_band.iloc[i]
+                direction.iloc[i] = -1
+            else:
+                supertrend.iloc[i] = lower_band.iloc[i]
+                direction.iloc[i] = 1
+        else:
+            prev_direction = direction.iloc[i-1]
+            
+            # Uptrend
+            if prev_direction == 1:
+                if curr_close <= lower_band.iloc[i]:
+                    supertrend.iloc[i] = upper_band.iloc[i]
+                    direction.iloc[i] = -1
+                else:
+                    supertrend.iloc[i] = max(lower_band.iloc[i], supertrend.iloc[i-1])
+                    direction.iloc[i] = 1
+            # Downtrend
+            else:
+                if curr_close >= upper_band.iloc[i]:
+                    supertrend.iloc[i] = lower_band.iloc[i]
+                    direction.iloc[i] = 1
+                else:
+                    supertrend.iloc[i] = min(upper_band.iloc[i], supertrend.iloc[i-1])
+                    direction.iloc[i] = -1
+    
+    # Create result dataframe
+    result = pd.DataFrame({
+        'supertrend': supertrend,
+        'direction': direction
+    })
+    
+    return result
+
+def calculate_tema(df, period=20, column='close'):
+    """
+    Calculate Triple Exponential Moving Average (TEMA).
+    
+    TEMA reduces lag compared to traditional moving averages by using
+    multiple exponential smoothing.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        Price data
+    period : int
+        Period for calculation (default: 20)
+    column : str
+        Column to use for calculation (default: 'close')
+        
+    Returns:
+    --------
+    pd.Series
+        TEMA values
+    """
+    # Calculate EMAs
+    ema1 = df[column].ewm(span=period, adjust=False).mean()
+    ema2 = ema1.ewm(span=period, adjust=False).mean()
+    ema3 = ema2.ewm(span=period, adjust=False).mean()
+    
+    # Calculate TEMA
+    tema = 3 * ema1 - 3 * ema2 + ema3
+    
+    return tema
+
+def calculate_cmo(df, period=14, column='close'):
+    """
+    Calculate Chande Momentum Oscillator (CMO).
+    
+    CMO is similar to RSI but uses the sum of price changes rather than
+    average gains and losses.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        Price data
+    period : int
+        Period for calculation (default: 14)
+    column : str
+        Column to use for calculation (default: 'close')
+        
+    Returns:
+    --------
+    pd.Series
+        CMO values (-100 to +100)
+    """
+    # Calculate price changes
+    delta = df[column].diff()
+    
+    # Separate gains and losses
+    gains = delta.where(delta > 0, 0)
+    losses = -delta.where(delta < 0, 0)
+    
+    # Calculate sums over period
+    sum_gains = gains.rolling(window=period).sum()
+    sum_losses = losses.rolling(window=period).sum()
+    
+    # Calculate CMO
+    cmo = 100 * (sum_gains - sum_losses) / (sum_gains + sum_losses)
+    
+    return cmo

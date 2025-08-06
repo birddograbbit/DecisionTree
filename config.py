@@ -15,6 +15,7 @@ DATA_TEST_END_DATE = '20240510'  # Testing data end date
 
 # Model settings
 LOOKBACK_PERIOD = 10  # Number of days to look back for feature creation
+LOOKBACK_PERIOD_5MIN = 78  # Number of 5-minute bars to look back (1 trading day)
 # Note: FEATURE_COUNT removed as it was unused. Feature selection is now handled
 # through the feature auditing and pruning system in feature_engineering.py
 
@@ -104,3 +105,8 @@ HYBRID_CONFIG = {
 FEATURE_AUDIT_N_REPEATS = 10  # Number of times to permute each feature
 TOP_N_FEATURES = 10  # Number of top features to keep after pruning
 COLLINEARITY_THRESHOLD = 0.8  # Threshold for detecting collinear features
+
+# Transaction costs
+TRANSACTION_COST = 0.001  # 0.1% per trade (daily trading)
+TRANSACTION_COST_5MIN = 0.0005  # 0.05% per trade (5-minute trading)
+SLIPPAGE_5MIN = 0.0001  # 0.01% slippage for 5-minute trading

@@ -1,17 +1,76 @@
 """
-XGBoost model implementation - Simplified version.
+XGBoost model implementation with focal loss support.
 
-This simplified implementation removes the complex ModelAdapter and FocalLoss
-classes in favor of a straightforward XGBClassifier approach with built-in
-class balancing capabilities.
+This implementation supports both standard XGBoost and focal loss via imbalance-xgboost
+for better handling of class imbalance in trading scenarios.
 """
 
 import os
 import pickle
 import numpy as np
 import pandas as pd
+
+# Focal loss implementation (no external dependency needed)
+FOCAL_LOSS_AVAILABLE = True  # We'll implement it ourselves
+
+def focal_loss_objective(alpha=0.25, gamma=2.0):
+    """
+    Create a focal loss objective function for XGBoost.
+    
+    Focal loss helps with class imbalance by down-weighting easy examples
+    and focusing on hard negatives.
+    
+    Parameters:
+    -----------
+    alpha : float
+        Balancing parameter (typically set to inverse class frequency)
+    gamma : float
+        Focusing parameter (higher values focus more on hard examples)
+        
+    Returns:
+    --------
+    callable
+        Objective function for XGBoost
+    """
+    def objective(y_true, y_pred):
+        # Convert predictions to probabilities using sigmoid
+        p = 1.0 / (1.0 + np.exp(-y_pred))
+        
+        # Focal loss gradient calculation
+        # For y=1: gradient = alpha * (1-p)^gamma * (gamma * p * log(p) + p - 1)
+        # For y=0: gradient = (1-alpha) * p^gamma * (gamma * (1-p) * log(1-p) - p)
+        
+        # Calculate pt (probability of true class)
+        pt = p * y_true + (1 - p) * (1 - y_true)
+        
+        # Calculate alpha_t (class weight)
+        alpha_t = alpha * y_true + (1 - alpha) * (1 - y_true)
+        
+        # Gradient calculation
+        # Avoid log(0) by clipping probabilities
+        p_clip = np.clip(p, 1e-8, 1 - 1e-8)
+        
+        # Standard cross-entropy gradient
+        ce_grad = y_true - p
+        
+        # Focal term modulation
+        focal_term = alpha_t * (1 - pt) ** gamma
+        
+        # Final gradient
+        grad = -focal_term * ce_grad
+        
+        # Hessian (second derivative)
+        # For stability, use a simplified hessian
+        hess = focal_term * p * (1 - p) + 1e-8
+        
+        return grad, hess
+    
+    return objective
+
+# Import standard XGBoost as fallback
 try:
     import xgboost as xgb
+    from xgboost import XGBClassifier
     XGBOOST_AVAILABLE = True
 except ImportError:
     XGBOOST_AVAILABLE = False
@@ -23,15 +82,16 @@ from sklearn.pipeline import make_pipeline, Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.calibration import CalibratedClassifierCV
+import warnings
 
 
 class XGBoostModel(BaseModel, BaseEstimator, ClassifierMixin):
     """
-    Simplified XGBoost implementation of the BaseModel interface.
+    XGBoost implementation with focal loss support.
     
-    This implementation uses standard XGBClassifier with built-in class balancing
-    instead of complex custom objective functions, while maintaining full
-    scikit-learn compatibility.
+    This implementation supports both standard XGBoost and focal loss via imbalance-xgboost
+    for better handling of class imbalance. Falls back to standard XGBoost if focal loss
+    is not available or not requested.
     """
 
     @property
@@ -43,9 +103,10 @@ class XGBoostModel(BaseModel, BaseEstimator, ClassifierMixin):
                  subsample=0.8, colsample_bytree=0.8, gamma=0, 
                  objective='binary:logistic', random_state=42, n_jobs=-1,
                  class_weight=None, min_child_weight=1, reg_alpha=0, reg_lambda=1, 
-                 scale_pos_weight=1, **kwargs):
+                 scale_pos_weight=1, use_focal_loss=False, focal_gamma=2.0, 
+                 focal_alpha=0.25, **kwargs):
         """
-        Initialize the simplified XGBoost model.
+        Initialize the XGBoost model with optional focal loss support.
         
         Parameters:
         -----------
@@ -78,27 +139,63 @@ class XGBoostModel(BaseModel, BaseEstimator, ClassifierMixin):
             L2 regularization term on weights
         scale_pos_weight : float, default=1
             Controls the balance of positive and negative weights
+        use_focal_loss : bool, default=False
+            Whether to use focal loss (requires imbalance-xgboost)
+        focal_gamma : float, default=2.0
+            Focal loss gamma parameter (focusing parameter)
+            Higher values focus more on hard examples
+        focal_alpha : float, default=0.25
+            Focal loss alpha parameter (balance parameter)
+            Controls class weight in focal loss
         kwargs : dict
             Additional parameters to pass to XGBClassifier
         """
         if not XGBOOST_AVAILABLE:
             raise ImportError("XGBoost is not installed. Cannot create XGBoostModel.")
+        
+        # Store focal loss parameters
+        self.use_focal_loss = use_focal_loss and FOCAL_LOSS_AVAILABLE
+        self.focal_gamma = focal_gamma
+        self.focal_alpha = focal_alpha
+        
+        # No warning needed since we implement focal loss ourselves
             
-        self.params = {
-            'n_estimators': n_estimators,
-            'max_depth': max_depth,
-            'learning_rate': learning_rate,
-            'subsample': subsample,
-            'colsample_bytree': colsample_bytree,
-            'gamma': gamma,
-            'objective': objective,
-            'random_state': random_state,
-            'n_jobs': n_jobs,
-            'min_child_weight': min_child_weight,
-            'reg_alpha': reg_alpha,
-            'reg_lambda': reg_lambda,
-            'scale_pos_weight': scale_pos_weight
-        }
+        # Setup parameters
+        if self.use_focal_loss:
+            # For focal loss, we'll use custom objective
+            self.params = {
+                'n_estimators': n_estimators,
+                'max_depth': max_depth,
+                'learning_rate': learning_rate,
+                'subsample': subsample,
+                'colsample_bytree': colsample_bytree,
+                'gamma': gamma,
+                'disable_default_eval_metric': True,  # Disable default metric for custom objective
+                'random_state': random_state,
+                'n_jobs': n_jobs,
+                'min_child_weight': min_child_weight,
+                'reg_alpha': reg_alpha,
+                'reg_lambda': reg_lambda
+            }
+            # Note: scale_pos_weight not used with focal loss
+            print(f"Using focal loss with gamma={focal_gamma}, alpha={focal_alpha}")
+        else:
+            # Standard XGBoost parameters
+            self.params = {
+                'n_estimators': n_estimators,
+                'max_depth': max_depth,
+                'learning_rate': learning_rate,
+                'subsample': subsample,
+                'colsample_bytree': colsample_bytree,
+                'gamma': gamma,
+                'objective': objective,
+                'random_state': random_state,
+                'n_jobs': n_jobs,
+                'min_child_weight': min_child_weight,
+                'reg_alpha': reg_alpha,
+                'reg_lambda': reg_lambda,
+                'scale_pos_weight': scale_pos_weight
+            }
         
         # Add any additional parameters
         for key, value in kwargs.items():
@@ -108,7 +205,8 @@ class XGBoostModel(BaseModel, BaseEstimator, ClassifierMixin):
         self.class_weight = class_weight
         
         # Initialize base model
-        self._base = xgb.XGBClassifier(**self.params)
+        self._base = XGBClassifier(**self.params)
+            
         self._clf = None  # Will hold the pipeline
         self.feature_names = None
         
@@ -169,22 +267,38 @@ class XGBoostModel(BaseModel, BaseEstimator, ClassifierMixin):
         # Store feature names if available (for feature importance)
         self.feature_names = X.columns if hasattr(X, 'columns') else None
         
-        # Handle class imbalance with built-in XGBoost mechanisms
-        if self.class_weight == 'balanced':
-            # Calculate balanced scale_pos_weight
-            class_counts = np.bincount(y)
-            if len(class_counts) >= 2:
-                scale_pos_weight = class_counts[0] / class_counts[1]
-                # Update the base model parameter
-                self._base.set_params(scale_pos_weight=scale_pos_weight)
-                print(f"Automatically set scale_pos_weight to {scale_pos_weight:.3f} for balanced classes")
-        
-        elif isinstance(self.class_weight, dict):
-            # Convert class weight dictionary to scale_pos_weight if possible
-            if 0 in self.class_weight and 1 in self.class_weight:
-                scale_pos_weight = self.class_weight[1] / self.class_weight[0]
-                self._base.set_params(scale_pos_weight=scale_pos_weight)
-                print(f"Set scale_pos_weight to {scale_pos_weight:.3f} based on class_weight dict")
+        # Handle class imbalance differently for focal loss vs standard XGBoost
+        if self.use_focal_loss:
+            # Calculate alpha based on class distribution if needed
+            if self.focal_alpha == 'auto' or self.class_weight == 'balanced':
+                class_counts = np.bincount(y)
+                if len(class_counts) >= 2:
+                    # Alpha should be minority class frequency for focal loss
+                    self.focal_alpha = class_counts[1] / (class_counts[0] + class_counts[1])
+                    print(f"Automatically set focal_alpha to {self.focal_alpha:.3f} based on class distribution")
+            
+            # Set custom objective function
+            focal_obj = focal_loss_objective(alpha=self.focal_alpha, gamma=self.focal_gamma)
+            self._base.set_params(objective=focal_obj)
+            # Also set evaluation metric
+            self._base.set_params(eval_metric='logloss')
+        else:
+            # Standard XGBoost class balancing
+            if self.class_weight == 'balanced':
+                # Calculate balanced scale_pos_weight
+                class_counts = np.bincount(y)
+                if len(class_counts) >= 2:
+                    scale_pos_weight = class_counts[0] / class_counts[1]
+                    # Update the base model parameter
+                    self._base.set_params(scale_pos_weight=scale_pos_weight)
+                    print(f"Automatically set scale_pos_weight to {scale_pos_weight:.3f} for balanced classes")
+            
+            elif isinstance(self.class_weight, dict):
+                # Convert class weight dictionary to scale_pos_weight if possible
+                if 0 in self.class_weight and 1 in self.class_weight:
+                    scale_pos_weight = self.class_weight[1] / self.class_weight[0]
+                    self._base.set_params(scale_pos_weight=scale_pos_weight)
+                    print(f"Set scale_pos_weight to {scale_pos_weight:.3f} based on class_weight dict")
         
         # Create pipeline with scaling and XGBoost
         self._clf = make_pipeline(StandardScaler(), self._base)

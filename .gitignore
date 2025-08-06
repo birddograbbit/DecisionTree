@@ -60,3 +60,21 @@ test_dt/
 test_rf/
 test_stackin/
 test_xgb/
+.pymon
+test_baseline_dt/
+
+# Test output directories
+comparison_test/
+coverage.xml
+dt_test/
+feature_audit_results/
+optimized_comparison/
+optimized_rf_test/
+regime_adaptive_optimized/
+regime_fixed_test/
+regime_test/
+rf_test/
+xgb_test/
+xgboost_focal_test/
+test_focal_loss.py
+meta_test/

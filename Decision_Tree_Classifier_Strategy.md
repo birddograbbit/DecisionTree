@@ -73,11 +73,50 @@ The trading system has undergone significant development and currently includes 
    - Added model performance comparison functionality
    - Created tools for analyzing ensemble performance
 
+### Test Results (2025-07-27)
+Comprehensive testing reveals the system is functional but underperforming v0.2 targets:
+
+1. **Model Performance vs Targets**
+   - All models operational but below performance thresholds
+   - Best Sharpe Ratio: 0.368 (Decision Tree) vs 0.7 target
+   - Best CAGR/DD Ratio: 0.299 (Decision Tree) vs 0.35 target
+   - Best CV Accuracy: 53.4% (Stacking) vs 57% target
+   - Test coverage: 14.61% vs 25% threshold
+
+2. **Individual Model Results**
+   - Decision Tree: Sharpe 0.368, CAGR/DD 0.299, 5 trades
+   - Random Forest: Sharpe 0.009, CAGR/DD 0.129, 6 trades
+   - XGBoost: Sharpe 0.062, CAGR/DD 0.095, 63 trades
+   - Stacking Ensemble: Sharpe -0.070, CAGR/DD 0.131, 5 trades
+
+3. **Transformer Performance**
+   - Latency: 11.24ms (well below 100ms target)
+   - Integration with hybrid strategy confirmed working
+
+### Known Bugs and Issues
+1. **RegimeAdaptiveStrategy Date Ambiguity Error**
+   - Error: "'date' is both an index level and a column label, which is ambiguous"
+   - Occurs during regime detection initialization
+   - Needs fix in data preprocessing logic
+
+2. **XGBoost Focal Loss Warnings**
+   - Parameters "focal_alpha", "focal_gamma", "use_focal_loss" not recognized
+   - Expected behavior but should be cleaned up
+
+3. **Low Test Coverage**
+   - Current: 14.61% vs 25% minimum requirement
+   - Missing comprehensive test coverage for all modules
+
+4. **Performance Issues**
+   - All models significantly underperforming v0.2 targets
+   - Need hyperparameter optimization and feature engineering improvements
+
 ### Current Limitations
 1. Limited real-world testing of regime-adaptive strategies
 2. Need for further optimization of regime-specific parameters
 3. Interactive dashboard not yet implemented
 4. Limited hyperparameter optimization framework
+5. Models not meeting v0.2 performance targets
 
 ## System Architecture
 

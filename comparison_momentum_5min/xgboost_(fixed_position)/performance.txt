@@ -1,0 +1,17 @@
+Performance Summary for XGBoost (Fixed Position):
+total_return: -4.76%
+ann_return: -5.23%
+ann_volatility: 8.01%
+sharpe_ratio: -0.9031
+max_drawdown: 10.71%
+cagr_dd_ratio: -0.4884
+num_trades: 25.0000
+win_rate: 40.00%
+profit_factor: 0.9735
+avg_win: 1061.5794
+avg_loss: -726.9815
+avg_holding_period: 316.2900
+accuracy: nan
+precision: nan
+recall: nan
+f1: nan

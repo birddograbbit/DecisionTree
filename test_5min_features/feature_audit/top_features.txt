@@ -1,0 +1,10 @@
+plus_di
+atr
+volume_momentum_1d
+macd
+stoch_k
+minus_di
+adx
+price_momentum_5d
+adx_momentum
+atr_zscore

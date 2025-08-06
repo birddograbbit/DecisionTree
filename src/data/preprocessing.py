@@ -53,6 +53,58 @@ def load_ibkr_data(train_file, test_file):
     
     return combined_data
 
+
+def load_5min_data(train_file, test_file):
+    """
+    Load and combine 5-minute IBKR historical data files.
+    
+    Parameters:
+    -----------
+    train_file : str
+        Path to training data file (5-minute bars)
+    test_file : str
+        Path to testing data file (5-minute bars)
+        
+    Returns:
+    --------
+    pd.DataFrame
+        Combined and preprocessed 5-minute data
+    """
+    # Load training and testing data
+    print(f"Loading 5-minute training data from {train_file}...")
+    train_data = pd.read_csv(train_file)
+    
+    print(f"Loading 5-minute testing data from {test_file}...")
+    test_data = pd.read_csv(test_file)
+    
+    # Combine the data
+    combined_data = pd.concat([train_data, test_data])
+    
+    # Convert date column to datetime and handle timezone
+    combined_data['date'] = pd.to_datetime(combined_data['date'])
+    # Remove timezone info for consistency with existing code
+    combined_data['date'] = combined_data['date'].dt.tz_localize(None)
+    combined_data.set_index('date', inplace=True)
+    
+    # Sort by date
+    combined_data = combined_data.sort_index()
+    
+    # Make column names lowercase
+    combined_data.columns = combined_data.columns.str.lower()
+    
+    # Check for missing values
+    missing_count = combined_data.isnull().sum().sum()
+    if missing_count > 0:
+        print(f"Warning: Found {missing_count} missing values in the data.")
+        # Drop rows with any missing values for 5-minute data
+        combined_data = combined_data.dropna()
+        print(f"Dropped rows with missing values. New shape: {combined_data.shape}")
+    
+    print(f"5-minute data loaded and preprocessed. Shape: {combined_data.shape}")
+    print(f"Date range: {combined_data.index.min()} to {combined_data.index.max()}")
+    
+    return combined_data
+
 def preprocess_data(df):
     """
     Preprocess raw price data for model training.

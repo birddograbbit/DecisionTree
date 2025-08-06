@@ -1,0 +1,17 @@
+Performance Summary for Regime Adaptive RF:
+total_return: 0.02%
+ann_return: 0.00%
+ann_volatility: 0.01%
+sharpe_ratio: -255.8349
+max_drawdown: 0.02%
+cagr_dd_ratio: 0.1025
+num_trades: 3.0000
+win_rate: 66.67%
+profit_factor: 5.7954
+avg_win: 9.6110
+avg_loss: -3.3168
+avg_holding_period: 202.3333
+accuracy: nan
+precision: nan
+recall: nan
+f1: nan

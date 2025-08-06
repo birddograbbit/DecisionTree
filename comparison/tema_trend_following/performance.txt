@@ -1,0 +1,7 @@
+Performance Summary for TEMA Trend Following:
+total_return: -21.07%
+sharpe_ratio: -0.3239
+max_drawdown: -35.55%
+num_trades: 119
+win_rate: 51.70%
+strategy: TEMA

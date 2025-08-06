@@ -1,0 +1,19 @@
+Feature Audit Summary
+====================
+
+Model Used: random_forest
+Original Features: 14
+Selected Features: 10
+Reduction: 28.6%
+
+Top 10 Features:
+ 1. sma_ratio: 0.0072
+ 2. atr_zscore: 0.0061
+ 3. rsi: 0.0054
+ 4. adx_momentum: 0.0044
+ 5. stoch_k: 0.0043
+ 6. macd: 0.0036
+ 7. std: 0.0025
+ 8. adx: 0.0025
+ 9. price_momentum_5d: 0.0023
+10. atr: 0.0021

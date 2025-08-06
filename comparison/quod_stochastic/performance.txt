@@ -1,0 +1,9 @@
+Performance Summary for Quod Stochastic:
+total_return: -23.19%
+sharpe_ratio: -0.2565
+max_drawdown: -24.75%
+num_trades: 392
+win_rate: 53.29%
+reversal_signals: 26
+pullback_signals: 0
+strategy: Quod

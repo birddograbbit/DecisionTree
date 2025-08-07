@@ -13,3 +13,14 @@ Use `optimize_hyperparameters.py` to run Optuna sweeps.
 
 ## Multi‑GPU Training
 Set the wrapper's `device` argument to a CUDA device id and enable DistributedDataParallel if needed.
+
+## Meta-Strategy Tuning
+Use `strategy_runner.py` with the `meta_strategy` model and adjust the new CLI parameters:
+```bash
+python strategy_runner.py --data data/raw --model meta_strategy --timeframe 5min \
+    --performance-window 390 --switch-cooldown 78 --output meta_run
+```
+For automated sweeps across common parameter combinations, run:
+```bash
+python meta_strategy_perf_test/param_sweep.py
+```

@@ -190,6 +190,16 @@ python strategy_runner.py --data data/raw --model random_forest --calibrate --ou
 python strategy_runner.py --data data/raw --model xgboost --output xgb_confidence_test
 ```
 
+#### 3.5 Meta-Strategy Parameter Tuning
+```bash
+# Run meta-strategy with custom tuning parameters
+python strategy_runner.py --data data/raw --model meta_strategy --timeframe 5min \
+    --performance-window 390 --switch-cooldown 78 --output meta_tuned
+
+# Sweep common combinations and save summary CSV
+python meta_strategy_perf_test/param_sweep.py
+```
+
 ### Level 4: Integration & End-to-End Testing
 
 #### 4.1 Complete Workflow Test

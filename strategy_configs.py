@@ -344,6 +344,7 @@ STRATEGY_CONFIGS = {
             'weak_downtrend': 'bb_rsi_adx',
             'downtrend': 'tema',
             'strong_downtrend': 'tema'
-        }
+        },
+        'regime_override': True
     }
 }

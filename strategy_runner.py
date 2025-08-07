@@ -582,9 +582,10 @@ def get_strategy_configs(use_optimized_params=False, include_momentum=False, tim
 
 def run_single_strategy(data_path, model_type='random_forest', output_dir='results',
                        train_end_date=None, symbol='SPY', strategy_type='trend_following',
-                       calibrate=False, use_optimized_params=False, 
+                       calibrate=False, use_optimized_params=False,
                        run_feature_audit_flag=False, audit_model='random_forest',
-                       top_n_features=None, timeframe='daily'):
+                       top_n_features=None, timeframe='daily',
+                       performance_window=None, switch_cooldown=None):
     """
     Run a single strategy with specified parameters.
     
@@ -613,7 +614,11 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         Model type to use for feature importance evaluation
     top_n_features : int, optional
         Number of top features to keep after auditing
-        
+    performance_window : int, optional
+        Lookback window (in bars) for meta-strategy performance tracking
+    switch_cooldown : int, optional
+        Minimum bars between meta-strategy switches
+
     Returns:
     --------
     dict
@@ -708,12 +713,12 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
                 'primary_timeframe': '5T'  # 5-minute default for Quod
             })
         elif model_type == 'meta_strategy':
-            config.update({
-                'selection_method': 'performance',
-                'performance_window': 100,
-                'switch_cooldown': 20,
-                'strategies': ['quod', 'tema', 'bb_rsi_adx']
-            })
+            config = STRATEGY_CONFIGS.get('meta_strategy', {}).copy()
+            if performance_window is not None:
+                config['performance_window'] = performance_window
+            if switch_cooldown is not None:
+                config['switch_cooldown'] = switch_cooldown
+            config.setdefault('strategies', ['quod', 'tema', 'bb_rsi_adx'])
             # Dynamically import and register meta-strategy if needed
             if 'meta_strategy' not in StrategyRegistry.list_strategies():
                 from src.strategies.meta_strategy import MetaStrategy
@@ -933,10 +938,15 @@ def parse_arguments():
     parser.add_argument('--include-momentum', action='store_true',
                         help='Include momentum strategies (BB-RSI-ADX, TEMA, Quod) in comparison mode')
     
-    parser.add_argument('--timeframe', 
-                        choices=['daily', '5min'], 
+    parser.add_argument('--timeframe',
+                        choices=['daily', '5min'],
                         default='daily',
                         help='Data timeframe to use (default: daily)')
+
+    parser.add_argument('--performance-window', type=int, default=None,
+                        help='Performance window for meta-strategy (bars)')
+    parser.add_argument('--switch-cooldown', type=int, default=None,
+                        help='Switch cooldown for meta-strategy (bars)')
     
     return parser.parse_args()
 
@@ -969,7 +979,9 @@ def main():
             run_feature_audit_flag=args.feature_audit,
             audit_model=args.audit_model,
             top_n_features=args.top_features,
-            timeframe=args.timeframe
+            timeframe=args.timeframe,
+            performance_window=args.performance_window,
+            switch_cooldown=args.switch_cooldown
         )
     else:  # compare mode
         run_strategy_comparison(

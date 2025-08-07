@@ -389,6 +389,13 @@ STRATEGY_CONFIGS = {
     'bb_rsi_adx_5min': BB_RSI_ADX_5MIN_CONFIG,
     'tema_5min': TEMA_5MIN_CONFIG,
     'hybrid_xgb_tema_5min': HYBRID_XGB_TEMA_5MIN_CONFIG,
+    'multi_tf_tema': {
+        'name': 'Multi-Timeframe TEMA',
+        'model_type': 'multi_timeframe',
+        'base_strategy': 'tema',
+        'timeframes': ['5min', '15min', '1h', '1D'],
+        'combine_method': 'average'
+    },
     # Meta-strategy configuration
     'meta_strategy': {
         'name': 'meta_strategy',

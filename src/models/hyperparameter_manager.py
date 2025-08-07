@@ -254,7 +254,7 @@ class HyperparameterManager:
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
     
-    def optimize_hyperparameters(self, model_type, X, y, n_trials=None, regime=None):
+    def optimize_hyperparameters(self, model_type, X, y, prices, n_trials=None, regime=None):
         """
         Optimize hyperparameters for a model type.
         
@@ -292,6 +292,7 @@ class HyperparameterManager:
             model_type=model_type,
             X=X,
             y=y,
+            prices=prices,
             n_trials=n_trials,
             n_splits=config.TIMESERIES_CV_SPLITS,
             random_state=config.RANDOM_STATE
@@ -302,7 +303,7 @@ class HyperparameterManager:
         
         return best_params
     
-    def create_optimized_model(self, model_type, X=None, y=None, regime=None, 
+    def create_optimized_model(self, model_type, X=None, y=None, prices=None, regime=None,
                             force_optimization=False, n_trials=None):
         """
         Create a model with optimized hyperparameters.
@@ -331,8 +332,8 @@ class HyperparameterManager:
         from .model_factory import ModelFactory
         
         # If forcing optimization and data is provided, optimize
-        if force_optimization and X is not None and y is not None:
-            best_params = self.optimize_hyperparameters(model_type, X, y, n_trials, regime)
+        if force_optimization and X is not None and y is not None and prices is not None:
+            best_params = self.optimize_hyperparameters(model_type, X, y, prices, n_trials, regime)
         else:
             # Otherwise, load best parameters
             best_params = self.get_best_params(model_type, regime)
@@ -340,7 +341,7 @@ class HyperparameterManager:
         # Create model with best parameters
         return ModelFactory.create_model(model_type, **best_params)
     
-    def get_regime_specific_models(self, X, y, model_type, regimes, 
+    def get_regime_specific_models(self, X, y, prices, model_type, regimes,
                                     force_optimization=False, n_trials=None):
         """
         Create regime-specific models with optimized hyperparameters.
@@ -385,10 +386,11 @@ class HyperparameterManager:
             # Extract data for this regime using positional indices
             X_regime = X.iloc[regime_indices]
             y_regime = y.iloc[regime_indices]
+            price_regime = prices.iloc[regime_indices]
             
             # Create optimized model for this regime
             regime_models[regime] = self.create_optimized_model(
-                model_type, X_regime, y_regime, regime, 
+                model_type, X_regime, y_regime, price_regime, regime,
                 force_optimization, n_trials
             )
             

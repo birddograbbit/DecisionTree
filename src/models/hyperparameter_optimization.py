@@ -36,10 +36,10 @@ def _sharpe_from_predictions(preds, price_series):
         return -np.inf
     return results['performance'].get('sharpe_ratio', -np.inf)
 
-def optimize_decision_tree(X, y, prices, n_trials=100, n_splits=5, random_state=42):
+def optimize_decision_tree(X, y, n_trials=100, n_splits=5, random_state=42, prices=None):
     """
     Optimize hyperparameters for Decision Tree model using Optuna.
-    
+
     Parameters:
     -----------
     X : pd.DataFrame
@@ -52,7 +52,9 @@ def optimize_decision_tree(X, y, prices, n_trials=100, n_splits=5, random_state=
         Number of splits for TimeSeriesSplit (default: 5)
     random_state : int
         Random seed for reproducibility (default: 42)
-        
+    prices : pd.Series or None
+        Optional price series aligned with y (default: None)
+
     Returns:
     --------
     dict
@@ -270,7 +272,7 @@ def get_sample_weights(y, class_weight='balanced'):
         # No class weights
         return np.ones(len(y))
 
-def optimize_hyperparameters(model_type, X, y, prices, n_trials=100, n_splits=5, random_state=42):
+def optimize_hyperparameters(model_type, X, y, n_trials=100, n_splits=5, random_state=42, prices=None):
     """
     Optimize hyperparameters for a given model type using Optuna.
     
@@ -282,6 +284,8 @@ def optimize_hyperparameters(model_type, X, y, prices, n_trials=100, n_splits=5,
         Feature matrix
     y : pd.Series
         Target values
+    prices : pd.Series or None
+        Optional price series to align with y (default: None)
     n_trials : int
         Number of optimization trials (default: 100)
     n_splits : int
@@ -295,7 +299,7 @@ def optimize_hyperparameters(model_type, X, y, prices, n_trials=100, n_splits=5,
         Best hyperparameters
     """
     if model_type == 'decision_tree':
-        return optimize_decision_tree(X, y, n_trials, n_splits, random_state)
+        return optimize_decision_tree(X, y, n_trials, n_splits, random_state, prices)
     elif model_type == 'random_forest':
         return optimize_random_forest(X, y, prices, n_trials, n_splits, random_state)
     elif model_type == 'xgboost':

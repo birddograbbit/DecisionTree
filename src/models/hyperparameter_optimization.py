@@ -15,13 +15,28 @@ import numpy as np
 import pandas as pd
 import config
 import warnings
-from sklearn.model_selection import TimeSeriesSplit, cross_val_score
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
 import optuna
 from optuna.samplers import TPESampler
-import config
+from src.backtesting.engine import BacktestEngine
 
-def optimize_decision_tree(X, y, n_trials=100, n_splits=5, random_state=42):
+def _sharpe_from_predictions(preds, price_series):
+    """Convert predictions to signals and compute Sharpe ratio via backtest."""
+    signals = pd.DataFrame({
+        'date': price_series.index,
+        'symbol': 'SPY',
+        'signal': np.where(preds > 0, 1, -1)
+    })
+    engine = BacktestEngine(initial_capital=config.INITIAL_CAPITAL)
+    data = pd.DataFrame({'close': price_series.values}, index=price_series.index)
+    results = engine.run_backtest(signals, {'SPY': data})
+    trades = results.get('trades', pd.DataFrame())
+    if trades.empty:
+        return -np.inf
+    return results['performance'].get('sharpe_ratio', -np.inf)
+
+def optimize_decision_tree(X, y, prices, n_trials=100, n_splits=5, random_state=42):
     """
     Optimize hyperparameters for Decision Tree model using Optuna.
     
@@ -70,17 +85,17 @@ def optimize_decision_tree(X, y, n_trials=100, n_splits=5, random_state=42):
         
         # Use TimeSeriesSplit for cross-validation
         tscv = TimeSeriesSplit(n_splits=n_splits)
-        
-        # Evaluate model with cross-validation
-        scores = cross_val_score(
-            pipeline, X, y, 
-            cv=tscv, 
-            scoring='accuracy',
-            n_jobs=-1
-        )
-        
-        # Return mean score
-        return scores.mean()
+        sharpe_scores = []
+        for train_idx, test_idx in tscv.split(X):
+            X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+            y_train = y.iloc[train_idx]
+            price_test = prices.iloc[test_idx]
+
+            pipeline.fit(X_train, y_train)
+            preds = pipeline.predict(X_test)
+            sharpe_scores.append(_sharpe_from_predictions(preds, price_test))
+
+        return float(np.nanmean(sharpe_scores))
     
     # Create study with TPE sampler
     study = optuna.create_study(
@@ -94,7 +109,7 @@ def optimize_decision_tree(X, y, n_trials=100, n_splits=5, random_state=42):
     # Return best hyperparameters
     return study.best_params
 
-def optimize_random_forest(X, y, n_trials=100, n_splits=5, random_state=42):
+def optimize_random_forest(X, y, prices, n_trials=100, n_splits=5, random_state=42):
     """
     Optimize hyperparameters for Random Forest model using Optuna.
     
@@ -142,20 +157,20 @@ def optimize_random_forest(X, y, n_trials=100, n_splits=5, random_state=42):
         
         # Create pipeline with scaling
         pipeline = make_pipeline(StandardScaler(), model)
-        
+
         # Use TimeSeriesSplit for cross-validation
         tscv = TimeSeriesSplit(n_splits=n_splits)
-        
-        # Evaluate model with cross-validation
-        scores = cross_val_score(
-            pipeline, X, y, 
-            cv=tscv, 
-            scoring='accuracy',
-            n_jobs=-1
-        )
-        
-        # Return mean score
-        return scores.mean()
+        sharpe_scores = []
+        for train_idx, test_idx in tscv.split(X):
+            X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+            y_train = y.iloc[train_idx]
+            price_test = prices.iloc[test_idx]
+
+            pipeline.fit(X_train, y_train)
+            preds = pipeline.predict(X_test)
+            sharpe_scores.append(_sharpe_from_predictions(preds, price_test))
+
+        return float(np.nanmean(sharpe_scores))
     
     # Create study with TPE sampler
     study = optuna.create_study(
@@ -169,118 +184,48 @@ def optimize_random_forest(X, y, n_trials=100, n_splits=5, random_state=42):
     # Return best hyperparameters
     return study.best_params
 
-def optimize_xgboost(X, y, n_trials=100, n_splits=5, random_state=42):
-    """
-    Optimize hyperparameters for XGBoost model using Optuna.
-    
-    This function now works with the simplified XGBoost implementation
-    that uses standard XGBClassifier without focal loss complexity.
-    
-    Parameters:
-    -----------
-    X : pd.DataFrame
-        Feature matrix
-    y : pd.Series
-        Target values
-    n_trials : int
-        Number of optimization trials (default: 100)
-    n_splits : int
-        Number of splits for TimeSeriesSplit (default: 5)
-    random_state : int
-        Random seed for reproducibility (default: 42)
-        
-    Returns:
-    --------
-    dict
-        Best hyperparameters
-    """
-    # Define the objective function for Optuna
+def optimize_xgboost(X, y, prices, n_trials=100, n_splits=5, random_state=42):
+    """Optimize hyperparameters for XGBoost using Sharpe ratio."""
+
     def objective(trial):
-        try:
-            # Import required modules
-            from ..models.xgboost_model import XGBoostModel
-            
-            # Define hyperparameters to optimize (simplified - no focal loss)
-            params = {
-                'n_estimators': trial.suggest_int('n_estimators', 50, 500),
-                'max_depth': trial.suggest_int('max_depth', 3, 12),
-                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
-                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
-                'gamma': trial.suggest_float('gamma', 0, 5),
-                'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
-                'reg_alpha': trial.suggest_float('reg_alpha', 0, 5),
-                'reg_lambda': trial.suggest_float('reg_lambda', 0, 5),
-                'scale_pos_weight': trial.suggest_float('scale_pos_weight', 1, 10),
-                'class_weight': trial.suggest_categorical('class_weight', ['balanced', None])
-            }
-            
-            # Create custom evaluation function using the simplified XGBoostModel
-            def custom_cv_score_with_model(X, y, cv):
-                scores = []
-                for train_idx, test_idx in cv.split(X):
-                    X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
-                    y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
-                    
-                    # Create XGBoostModel with suggested hyperparameters
-                    model = XGBoostModel(
-                        n_estimators=params['n_estimators'],
-                        max_depth=params['max_depth'],
-                        learning_rate=params['learning_rate'],
-                        subsample=params['subsample'],
-                        colsample_bytree=params['colsample_bytree'],
-                        gamma=params['gamma'],
-                        min_child_weight=params['min_child_weight'],
-                        reg_alpha=params['reg_alpha'],
-                        reg_lambda=params['reg_lambda'],
-                        scale_pos_weight=params['scale_pos_weight'],
-                        random_state=random_state,
-                        class_weight=params['class_weight']
-                    )
-                    
-                    # Train the model using the same method as in production
-                    model.train(X_train, y_train)
-                    
-                    # Get predictions using the same method as in production
-                    y_pred_proba = model.predict(X_test)
-                    
-                    # Convert to binary predictions using threshold 0.5
-                    y_pred = (y_pred_proba > 0.5).astype(int)
-                    
-                    # Calculate accuracy
-                    score = (y_pred == y_test).mean()
-                    scores.append(score)
-                
-                return np.mean(scores)
-            
-            # Use TimeSeriesSplit for cross-validation
-            tscv = TimeSeriesSplit(n_splits=n_splits)
-            
-            # Perform custom cross-validation using the actual XGBoostModel
-            score = custom_cv_score_with_model(X, y, tscv)
-            
-            # Return the mean score
-            return score
-            
-        except ImportError as e:
-            # If XGBoost is not available, return a bad score
-            print(f"Import error in XGBoost optimization: {e}")
-            return 0.0
-        except Exception as e:
-            # Log any errors for debugging
-            print(f"Error in XGBoost optimization: {e}")
-            return 0.0
-    
-    # Create study with TPE sampler
-    study = optuna.create_study(
-        direction='maximize',
-        sampler=TPESampler(seed=random_state)
-    )
-    
-    # Optimize hyperparameters
+        from xgboost import XGBClassifier
+
+        params = {
+            'n_estimators': trial.suggest_int('n_estimators', 50, 500),
+            'max_depth': trial.suggest_int('max_depth', 3, 12),
+            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+            'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+            'gamma': trial.suggest_float('gamma', 0, 5),
+            'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
+            'reg_alpha': trial.suggest_float('reg_alpha', 0, 5),
+            'reg_lambda': trial.suggest_float('reg_lambda', 0, 5),
+            'scale_pos_weight': trial.suggest_float('scale_pos_weight', 1, 10)
+        }
+
+        model = XGBClassifier(
+            objective='binary:logistic',
+            use_label_encoder=False,
+            eval_metric='logloss',
+            random_state=random_state,
+            **params
+        )
+
+        tscv = TimeSeriesSplit(n_splits=n_splits)
+        sharpe_scores = []
+        for train_idx, test_idx in tscv.split(X):
+            X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+            y_train = y.iloc[train_idx]
+            price_test = prices.iloc[test_idx]
+
+            model.fit(X_train, y_train)
+            preds = model.predict(X_test)
+            sharpe_scores.append(_sharpe_from_predictions(preds, price_test))
+
+        return float(np.nanmean(sharpe_scores))
+
+    study = optuna.create_study(direction='maximize', sampler=TPESampler(seed=random_state))
     study.optimize(objective, n_trials=n_trials)
-    
-    # Return best hyperparameters
     return study.best_params
 
 def get_sample_weights(y, class_weight='balanced'):
@@ -325,7 +270,7 @@ def get_sample_weights(y, class_weight='balanced'):
         # No class weights
         return np.ones(len(y))
 
-def optimize_hyperparameters(model_type, X, y, n_trials=100, n_splits=5, random_state=42):
+def optimize_hyperparameters(model_type, X, y, prices, n_trials=100, n_splits=5, random_state=42):
     """
     Optimize hyperparameters for a given model type using Optuna.
     
@@ -352,9 +297,9 @@ def optimize_hyperparameters(model_type, X, y, n_trials=100, n_splits=5, random_
     if model_type == 'decision_tree':
         return optimize_decision_tree(X, y, n_trials, n_splits, random_state)
     elif model_type == 'random_forest':
-        return optimize_random_forest(X, y, n_trials, n_splits, random_state)
+        return optimize_random_forest(X, y, prices, n_trials, n_splits, random_state)
     elif model_type == 'xgboost':
-        return optimize_xgboost(X, y, n_trials, n_splits, random_state)
+        return optimize_xgboost(X, y, prices, n_trials, n_splits, random_state)
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
 

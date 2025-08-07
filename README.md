@@ -71,7 +71,7 @@ If data files are missing, the system will attempt to load from any CSV files in
 ### Intraday 5-Minute Models
 
 The platform includes an intraday feature set with time-of-day signals, short-window RSI/EMA, rolling volatility, and lagged returns.
-Run any ML strategy on 5‑minute data by specifying the timeframe:
+Ensure 5‑minute historical CSV files are available under `data/raw/` with names like `historical_data_STOCK_SPY_5_mins_2023-2024.csv`. Run any ML strategy on 5‑minute data by specifying the timeframe:
 
 ```bash
 python strategy_runner.py --data data/raw --model random_forest --timeframe 5min --output rf_5min

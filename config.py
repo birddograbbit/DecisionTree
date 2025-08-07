@@ -91,6 +91,16 @@ TRANSFORMER_CONFIG = {
         'n_layers': 2,
         'dropout': 0.1,
         'epochs': 20,
+    },
+    '5min': {
+        'seq_length': 20,
+        'prediction_length': 1,
+        'n_features': 16,
+        'd_model': 32,
+        'n_heads': 4,
+        'n_layers': 2,
+        'dropout': 0.1,
+        'epochs': 20,
     }
 }
 

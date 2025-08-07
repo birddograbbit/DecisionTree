@@ -10,6 +10,7 @@ from src.engines.signal_engine import SignalEngine
 from src.features.feature_engineering import engineer_features
 from src.backtesting.engine import BacktestEngine
 from src.utils.adaptive_thresholds import are_adaptive_thresholds_needed, calculate_adaptive_thresholds
+import config
 
 class TrendFollowingStrategy(BaseStrategy):
     """
@@ -77,8 +78,9 @@ class TrendFollowingStrategy(BaseStrategy):
         tuple
             (X, y, dates)
         """
-        # Use the feature engineering module to create features
-        return engineer_features(data)
+        timeframe = self.config.get('timeframe', 'daily')
+        lookback = config.LOOKBACK_PERIOD_5MIN if timeframe == '5min' else config.LOOKBACK_PERIOD
+        return engineer_features(data, lookback_period=lookback, timeframe=timeframe)
 
     def generate_signals(self, features, predictions, dates):
         """

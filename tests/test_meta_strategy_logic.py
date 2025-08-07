@@ -115,3 +115,44 @@ def test_meta_strategy_regime_selection(monkeypatch, dummy_data):
 
     selected = meta._select_strategy(dummy_data, dummy_data.index)
     assert selected == 's2'
+
+
+def test_meta_strategy_regime_override_in_performance_mode(monkeypatch, dummy_data):
+    """Regime detection should override performance-based choice when enabled."""
+    sharpe_map = {
+        's1': {'sharpe_ratio': 1.0, 'insufficient_data': False},
+        's2': {'sharpe_ratio': 0.0, 'insufficient_data': False},
+    }
+
+    monkeypatch.setattr(
+        StrategyRegistry,
+        'create_strategy',
+        classmethod(lambda cls, name, config=None: DummyStrategy(name)),
+    )
+    monkeypatch.setattr(
+        StrategyRegistry,
+        'get_performance_stats',
+        classmethod(lambda cls, name, window=100: sharpe_map[name]),
+    )
+
+    config = {
+        'strategies': ['s1', 's2'],
+        'selection_method': 'performance_regime',
+        'performance_window': 10,
+        'switch_cooldown': 0,
+        'regime_map': {'bull': 's2', 'neutral': 's1'},
+    }
+    meta = MetaStrategy(config)
+
+    # Regime detector indicates bullish regime mapping to s2
+    monkeypatch.setattr(
+        meta.regime_detector, 'get_current_regime', lambda: {'regime_label': 'bull'}
+    )
+
+    features = dummy_data
+    dates = dummy_data.index
+    predictions = np.zeros(len(features))
+
+    meta.generate_signals(features, predictions, dates)
+    # Despite s1 having better performance, regime override selects s2
+    assert meta.current_strategy_name == 's2'

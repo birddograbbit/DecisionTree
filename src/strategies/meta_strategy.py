@@ -36,7 +36,7 @@ class MetaStrategy(BaseStrategy):
         config : dict, optional
             Configuration with keys:
             - strategies: List of strategy names to use
-            - selection_method: 'performance' or 'regime'
+            - selection_method: 'performance', 'regime', or 'performance_regime'
             - performance_window: Bars to track performance (default: 100)
             - switch_cooldown: Minimum bars between switches (default: 20)
             - regime_map: Dict mapping regimes to strategies (for regime mode)
@@ -73,8 +73,8 @@ class MetaStrategy(BaseStrategy):
         self.current_strategy = self.available_strategies[self.current_strategy_name]
         self.bars_since_switch = 0
         
-        # Regime detection (for regime-based selection)
-        if self.selection_method == 'regime':
+        # Regime detection (for regime-based selection or overrides)
+        if self.selection_method in {'regime', 'performance_regime'}:
             self.regime_detector = RegimeDetector(
                 method=self.config.get('regime_method', 'trend_volatility')
             )
@@ -123,8 +123,8 @@ class MetaStrategy(BaseStrategy):
             else:
                 logger.info(f"Strategy {name} is rule-based, no training needed")
         
-        # Detect regimes if using regime-based selection
-        if self.selection_method == 'regime' and hasattr(self, 'regime_detector'):
+        # Detect regimes if using regime-based selection or overrides
+        if self.selection_method in {'regime', 'performance_regime'} and hasattr(self, 'regime_detector'):
             self.regime_detector.detect_regime(train_data)
     
     def generate_signals(self, features: pd.DataFrame, predictions: np.ndarray, 
@@ -202,6 +202,12 @@ class MetaStrategy(BaseStrategy):
             return self._select_by_performance()
         elif self.selection_method == 'regime':
             return self._select_by_regime(features, dates)
+        elif self.selection_method == 'performance_regime':
+            perf_choice = self._select_by_performance()
+            regime_choice = self._select_by_regime(features, dates)
+            if regime_choice != self.current_strategy_name:
+                return regime_choice
+            return perf_choice
         else:
             # Default to current strategy
             return self.current_strategy_name

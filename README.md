@@ -8,12 +8,15 @@ An advanced ensemble-based machine learning trading system for S&P 500 stocks wi
 The system has evolved into a sophisticated trading platform with the following **completed features**:
 
 ✅ **Multi-Model Support**: Decision Tree, Random Forest, XGBoost, and Stacking ensembles  
-✅ **Strategy Framework**: TrendFollowing and RegimeAdaptive strategies  
-✅ **Hyperparameter Optimization**: Automated optimization with Optuna  
+✅ **Strategy Framework**: TrendFollowing and RegimeAdaptive strategies
+✅ **Meta-Strategy Switching**: Performance tracking with regime-based overrides
+✅ **Hyperparameter Optimization**: Automated optimization with Optuna
 ✅ **Feature Engineering**: Advanced feature auditing and pruning capabilities  
 ✅ **Market Regime Detection**: Multi-method regime identification and adaptation  
 ✅ **Performance Analysis**: Comprehensive backtesting and visualization  
-✅ **Modular Architecture**: Engine-based design with clear separation of concerns  
+✅ **Modular Architecture**: Engine-based design with clear separation of concerns
+
+The meta-strategy includes a `performance_regime` selection method that combines recent performance with market regime detection, allowing regime changes to trigger immediate strategy switches.
 
 ### Success Metrics
 - **CAGR/Max Drawdown ratio** > 0.40 (vs S&P 500's ~0.18)

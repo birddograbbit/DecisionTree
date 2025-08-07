@@ -329,7 +329,7 @@ STRATEGY_CONFIGS = {
         'use_momentum_features': True,
         'use_multi_timeframe': True,
         'timeframes': ['5min'],
-        'selection_method': 'performance',  # 'performance' or 'regime'
+        'selection_method': 'performance_regime',  # 'performance', 'regime', or 'performance_regime'
         'performance_window': 390,  # 5 days for 5-minute data (78 bars/day)
         'switch_cooldown': 78,  # 1 day cooldown for 5-minute data
         'strategies': ['quod', 'tema', 'bb_rsi_adx'],

@@ -14,6 +14,13 @@ Use `optimize_hyperparameters.py` to run Optuna sweeps.
 ## Multi‑GPU Training
 Set the wrapper's `device` argument to a CUDA device id and enable DistributedDataParallel if needed.
 
+## Intraday Feature Set
+Models can be trained on 5‑minute data by supplying `--timeframe 5min` to `strategy_runner.py`. Make sure 5‑minute SPY CSV files exist in `data/raw` (e.g. `historical_data_STOCK_SPY_5_mins_2023-2024.csv`). The intraday pipeline adds hour/minute features, short-window RSI/EMA, rolling volatility, and lagged returns for improved high-frequency performance.
+
+```bash
+python strategy_runner.py --data data/raw --model decision_tree --timeframe 5min --output dt_intraday
+```
+
 ## Meta-Strategy Tuning
 Use `strategy_runner.py` with the `meta_strategy` model and adjust the new CLI parameters:
 ```bash

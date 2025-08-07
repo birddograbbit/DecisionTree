@@ -496,13 +496,19 @@ class QuodAdapter(BaseStrategy):
         
         # Calculate performance metrics
         metrics = self._calculate_backtest_metrics(signals, test_data)
-        
-        # Return in expected format
-        return {
-            'performance': metrics,
+
+        # Return both flattened metrics and structured components
+        result = {
+            **metrics,
             'trades': signals[signals['signal'] != 0],
-            'equity_curve': pd.DataFrame({'equity': (1 + metrics.get('total_return', 0))}, index=[test_data.index[-1]])
+            'equity_curve': pd.DataFrame(
+                {'equity': (1 + metrics.get('total_return', 0))},
+                index=[test_data.index[-1]]
+            ),
         }
+        # Preserve original nested format for backward compatibility
+        result['performance'] = metrics
+        return result
     
     def _calculate_backtest_metrics(self, signals: pd.DataFrame, 
                                    prices: pd.DataFrame) -> Dict[str, any]:

@@ -115,3 +115,51 @@ def test_meta_strategy_regime_selection(monkeypatch, dummy_data):
 
     selected = meta._select_strategy(dummy_data, dummy_data.index)
     assert selected == 's2'
+
+
+def test_meta_strategy_regime_override(monkeypatch, dummy_data):
+    sharpe_map = {
+        's1': {'sharpe_ratio': 1.0, 'insufficient_data': False},
+        's2': {'sharpe_ratio': 0.5, 'insufficient_data': False},
+    }
+
+    monkeypatch.setattr(StrategyRegistry, 'create_strategy', classmethod(lambda cls, name, config=None: DummyStrategy(name)))
+    monkeypatch.setattr(StrategyRegistry, 'get_performance_stats', classmethod(lambda cls, name, window=100: sharpe_map[name]))
+
+    config = {
+        'strategies': ['s1', 's2'],
+        'selection_method': 'performance',
+        'regime_override': True,
+        'regime_map': {'bull': 's2', 'neutral': 's1'},
+    }
+    meta = MetaStrategy(config)
+
+    monkeypatch.setattr(meta.regime_detector, 'get_current_regime', lambda: {'regime_label': 'bull'})
+
+    selected = meta._select_strategy(dummy_data, dummy_data.index)
+    assert selected == 's2'
+
+
+def test_meta_strategy_records_switch(monkeypatch, dummy_data):
+    sharpe_map = {
+        's1': {'sharpe_ratio': 0.0, 'insufficient_data': False},
+        's2': {'sharpe_ratio': 1.0, 'insufficient_data': False},
+    }
+
+    monkeypatch.setattr(StrategyRegistry, 'create_strategy', classmethod(lambda cls, name, config=None: DummyStrategy(name)))
+    monkeypatch.setattr(StrategyRegistry, 'get_performance_stats', classmethod(lambda cls, name, window=100: sharpe_map[name]))
+
+    config = {
+        'strategies': ['s1', 's2'],
+        'selection_method': 'performance',
+        'performance_window': 10,
+        'switch_cooldown': 0,
+    }
+    meta = MetaStrategy(config)
+
+    features = dummy_data
+    dates = dummy_data.index
+    predictions = np.zeros(len(features))
+
+    meta.generate_signals(features, predictions, dates)
+    assert meta.selection_history[-1]['strategy'] == 's2'

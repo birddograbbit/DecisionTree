@@ -4,6 +4,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.inspection import permutation_importance
 from sklearn.base import BaseEstimator, ClassifierMixin
 from src.features.indicators import *
+import config
 
 class ModelAdapter(BaseEstimator, ClassifierMixin):
     """
@@ -160,7 +161,7 @@ def add_technical_indicators(df, lookback_period=10):
     
     return result
 
-def engineer_features(df, lookback_period=10):
+def engineer_features(df, lookback_period=10, timeframe: str = 'daily'):
     """
     Create feature matrix for model training.
     
@@ -178,22 +179,37 @@ def engineer_features(df, lookback_period=10):
     """
     # Add technical indicators
     df_indicators = add_technical_indicators(df, lookback_period)
-    
+
     # Make a copy to avoid warnings
     df_features = df_indicators.copy()
-    
-    # Ensure we're not using any future information
-    # by using only indicators that look backwards, not forwards
-    
-    # Create expanded feature list including the new hybrid features
+
+    # Ensure we're not using any future information by using only
+    # indicators that look backwards, not forwards
+
+    # Base feature set used for all timeframes
     features = [
         'sma_ratio', 'rsi', 'std', 'bb_position',
         'price_momentum_5d', 'volume_momentum_1d',
         'macd', 'stoch_k', 'atr',
-        'adx', 'adx_momentum', 'atr_zscore',  # New momentum-volatility features
-        'plus_di', 'minus_di'  # Additional trend indicators
+        'adx', 'adx_momentum', 'atr_zscore',
+        'plus_di', 'minus_di'
     ]
-    
+
+    if timeframe == '5min':
+        # Add intraday-specific features
+        df_features['hour'] = df_features.index.hour
+        df_features['minute'] = df_features.index.minute
+        df_features['ema_5'] = df_features['close'].ewm(span=5).mean()
+        df_features['rsi_5'] = calculate_rsi(df_features, window=5)
+        df_features['volatility_5'] = df_features['returns'].rolling(window=5).std()
+        df_features['lag_return_1'] = df_features['returns'].shift(1)
+        df_features['lag_return_3'] = df_features['returns'].shift(3)
+
+        features.extend([
+            'hour', 'minute', 'ema_5', 'rsi_5',
+            'volatility_5', 'lag_return_1', 'lag_return_3'
+        ])
+
     # Extract features
     X = df_features[features]
     
@@ -457,7 +473,8 @@ def check_collinearity(X, threshold=0.8):
                 
     return correlated_pairs
 
-def prepare_train_test_data(df, train_end_date=None, prune_features_flag=False, top_n_features=10):
+def prepare_train_test_data(df, train_end_date=None, prune_features_flag=False,
+                            top_n_features=10, timeframe: str = 'daily'):
     """
     Prepare training and testing data for model development.
     
@@ -478,11 +495,14 @@ def prepare_train_test_data(df, train_end_date=None, prune_features_flag=False, 
     tuple
         (X_train, X_test, y_train, y_test, dates_train, dates_test, scaler)
     """
+    # Determine lookback based on timeframe
+    lookback = config.LOOKBACK_PERIOD_5MIN if timeframe == '5min' else config.LOOKBACK_PERIOD
+
     # Add technical indicators
-    df_features = add_technical_indicators(df)
-    
+    df_features = add_technical_indicators(df, lookback)
+
     # Engineer features
-    X, y, dates = engineer_features(df_features)
+    X, y, dates = engineer_features(df_features, lookback_period=lookback, timeframe=timeframe)
     
     # Split data into training and testing sets
     if train_end_date is not None:

@@ -104,6 +104,59 @@ XGBOOST_CONFIDENCE_CONFIG = {
     'use_adaptive_thresholds': 'auto'  # Use adaptive thresholds if needed
 }
 
+# 5-Minute ML Strategy Configurations
+DECISION_TREE_5MIN_CONFIG = {
+    'name': 'Decision Tree (5min)',
+    'model_type': 'decision_tree',
+    'model_params': {
+        'max_depth': 3,
+        'calibrate': False
+    },
+    'position_sizing': 'confidence',
+    'consecutive_buys': False,
+    'min_holding_days': 1,
+    'use_adaptive_thresholds': 'never'
+}
+
+RANDOM_FOREST_5MIN_CONFIG = {
+    'name': 'Random Forest (5min)',
+    'model_type': 'random_forest',
+    'model_params': {
+        'n_estimators': 50,
+        'max_depth': 3,
+        'class_weight': 'balanced',
+        'calibrate': False
+    },
+    'position_sizing': 'confidence',
+    'consecutive_buys': False,
+    'min_holding_days': 1,
+    'use_adaptive_thresholds': 'auto'
+}
+
+XGBOOST_5MIN_CONFIG = {
+    'name': 'XGBoost (5min)',
+    'model_type': 'xgboost',
+    'model_params': {
+        'n_estimators': 200,
+        'max_depth': 3,
+        'learning_rate': 0.05,
+        'subsample': 0.7,
+        'colsample_bytree': 0.7
+    },
+    'position_sizing': 'confidence',
+    'consecutive_buys': False,
+    'min_holding_days': 1,
+    'use_adaptive_thresholds': 'auto'
+}
+
+TRANSFORMER_5MIN_CONFIG = {
+    'name': 'Transformer (5min)',
+    'model_type': 'transformer',
+    'model_params': config.TRANSFORMER_CONFIG['5min'],
+    'position_sizing': 'confidence',
+    'use_adaptive_thresholds': 'auto'
+}
+
 # Stacking Ensemble
 STACKING_CONFIG = {
     'name': 'Stacking Ensemble',
@@ -294,6 +347,10 @@ STRATEGY_CONFIGS = {
     'random_forest_calibrated': RANDOM_FOREST_CALIBRATED_CONFIG,
     'xgboost_fixed': XGBOOST_FIXED_CONFIG,
     'xgboost_confidence': XGBOOST_CONFIDENCE_CONFIG,
+    'decision_tree_5min': DECISION_TREE_5MIN_CONFIG,
+    'random_forest_5min': RANDOM_FOREST_5MIN_CONFIG,
+    'xgboost_5min': XGBOOST_5MIN_CONFIG,
+    'transformer_5min': TRANSFORMER_5MIN_CONFIG,
     'stacking': STACKING_CONFIG,
     'regime_adaptive_rf': REGIME_ADAPTIVE_RF_CONFIG,
     'transformer': {

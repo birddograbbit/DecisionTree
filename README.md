@@ -9,12 +9,14 @@ The system has evolved into a sophisticated trading platform with the following 
 
 ✅ **Multi-Model Support**: Decision Tree, Random Forest, XGBoost, and Stacking ensembles  
 ✅ **Strategy Framework**: TrendFollowing and RegimeAdaptive strategies  
-✅ **Hyperparameter Optimization**: Automated optimization with Optuna  
-✅ **Feature Engineering**: Advanced feature auditing and pruning capabilities  
+✅ **Hyperparameter Optimization**: Automated optimization with Optuna
+✅ **Sharpe-Based Tuning**: Hyperparameter sweeps maximize trading Sharpe ratio
+✅ **Feature Engineering**: Advanced feature auditing and pruning capabilities
 ✅ **Market Regime Detection**: Multi-method regime identification and adaptation  
 ✅ **Performance Analysis**: Comprehensive backtesting and visualization
 ✅ **Modular Architecture**: Engine-based design with clear separation of concerns
 ✅ **Hybrid ML + Momentum Strategy**: Combine ML predictions with momentum signals
+✅ **Multi-Timeframe Ensemble**: Aggregate signals across 5min–daily horizons
 
 ### Success Metrics
 - **CAGR/Max Drawdown ratio** > 0.40 (vs S&P 500's ~0.18)

@@ -360,7 +360,9 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         print(f"\n=== Running strategy: {config['name']} ===")
 
         # Determine strategy type from config name
-        if 'meta_strategy' in config['name'].lower():
+        if config.get('model_type') == 'multi_timeframe' or 'multi_timeframe' in config['name'].lower():
+            strategy_type = 'multi_timeframe'
+        elif 'meta_strategy' in config['name'].lower():
             strategy_type = 'meta_strategy'
             # Dynamically import and register meta-strategy if needed
             if 'meta_strategy' not in StrategyRegistry.list_strategies():

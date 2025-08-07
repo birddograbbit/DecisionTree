@@ -669,6 +669,9 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         # For momentum strategies, use the model type as the strategy type
         strategy_type = model_type
         config_key = None  # Will create custom config below
+    elif model_type == 'hybrid_momentum':
+        strategy_type = 'hybrid_momentum'
+        config_key = 'hybrid_xgb_tema_5min'
     else:
         # Select appropriate configuration from STRATEGY_CONFIGS for ML models
         config_key = None
@@ -912,7 +915,7 @@ def parse_arguments():
     
     parser.add_argument('--model', type=str,
                         choices=['decision_tree', 'random_forest', 'xgboost', 'stacking', 'transformer', 'hybrid',
-                                 'bb_rsi_adx', 'tema', 'quod', 'meta_strategy'],
+                                 'bb_rsi_adx', 'tema', 'quod', 'meta_strategy', 'hybrid_momentum'],
                         default='random_forest',
                         help='Model type for single mode (default: random_forest)')
     

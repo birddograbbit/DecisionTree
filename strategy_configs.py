@@ -339,6 +339,17 @@ TEMA_5MIN_CONFIG = {
     'allow_same_bar_exit': True
 }
 
+HYBRID_XGB_TEMA_5MIN_CONFIG = {
+    'name': 'Hybrid XGBoost+TEMA (5min)',
+    'model_type': 'hybrid_momentum',
+    'ml_model_type': 'xgboost',
+    'ml_model_params': XGBOOST_5MIN_CONFIG['model_params'],
+    'momentum_strategy': 'tema',
+    'agree_only': True,
+    'weights': (0.3, 0.7),
+    'timeframe': '5min'
+}
+
 # All strategy configurations
 STRATEGY_CONFIGS = {
     'decision_tree': DECISION_TREE_CONFIG,
@@ -377,6 +388,7 @@ STRATEGY_CONFIGS = {
     # 5-minute momentum strategies
     'bb_rsi_adx_5min': BB_RSI_ADX_5MIN_CONFIG,
     'tema_5min': TEMA_5MIN_CONFIG,
+    'hybrid_xgb_tema_5min': HYBRID_XGB_TEMA_5MIN_CONFIG,
     # Meta-strategy configuration
     'meta_strategy': {
         'name': 'meta_strategy',

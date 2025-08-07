@@ -31,3 +31,15 @@ For automated sweeps across common parameter combinations, run:
 ```bash
 python meta_strategy_perf_test/param_sweep.py
 ```
+
+## Hybrid ML + Momentum Strategy
+
+The platform can blend machine learning predictions with momentum signals.
+The default configuration pairs an XGBoost model with the TEMA strategy.
+
+```bash
+python strategy_runner.py --data data/raw --model hybrid_momentum --timeframe 5min --output hybrid_run
+```
+
+`agree_only` and `weights` parameters can be adjusted in `strategy_configs.py`
+to experiment with different fusion modes.

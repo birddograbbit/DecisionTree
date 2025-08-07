@@ -12,8 +12,9 @@ The system has evolved into a sophisticated trading platform with the following 
 ✅ **Hyperparameter Optimization**: Automated optimization with Optuna  
 ✅ **Feature Engineering**: Advanced feature auditing and pruning capabilities  
 ✅ **Market Regime Detection**: Multi-method regime identification and adaptation  
-✅ **Performance Analysis**: Comprehensive backtesting and visualization  
-✅ **Modular Architecture**: Engine-based design with clear separation of concerns  
+✅ **Performance Analysis**: Comprehensive backtesting and visualization
+✅ **Modular Architecture**: Engine-based design with clear separation of concerns
+✅ **Hybrid ML + Momentum Strategy**: Combine ML predictions with momentum signals
 
 ### Success Metrics
 - **CAGR/Max Drawdown ratio** > 0.40 (vs S&P 500's ~0.18)
@@ -502,3 +503,11 @@ For live trading (Phase 3), configure IBKR:
 ---
 
 **Note**: This is an active development project currently in Phase 1.5 of the v0.2 roadmap. Critical issues as of 2025-06-05 have been resolved. For issues or contributions, see the development documentation in the main strategy file.
+### Hybrid ML + Momentum Example
+
+Run the default XGBoost + TEMA hybrid on 5‑minute data:
+
+```bash
+python strategy_runner.py --data data/raw --model hybrid_momentum --timeframe 5min --output hybrid_run
+```
+

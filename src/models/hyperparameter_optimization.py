@@ -36,7 +36,7 @@ def _sharpe_from_predictions(preds, price_series):
         return -np.inf
     return results['performance'].get('sharpe_ratio', -np.inf)
 
-def optimize_decision_tree(X, y, n_trials=100, n_splits=5, random_state=42, prices=None):
+def optimize_decision_tree(X, y, prices, n_trials=100, n_splits=5, random_state=42):
     """
     Optimize hyperparameters for Decision Tree model using Optuna.
 
@@ -46,14 +46,14 @@ def optimize_decision_tree(X, y, n_trials=100, n_splits=5, random_state=42, pric
         Feature matrix
     y : pd.Series
         Target values
+    prices : pd.Series
+        Price series aligned with y
     n_trials : int
         Number of optimization trials (default: 100)
     n_splits : int
         Number of splits for TimeSeriesSplit (default: 5)
     random_state : int
         Random seed for reproducibility (default: 42)
-    prices : pd.Series or None
-        Optional price series aligned with y (default: None)
 
     Returns:
     --------
@@ -299,7 +299,7 @@ def optimize_hyperparameters(model_type, X, y, n_trials=100, n_splits=5, random_
         Best hyperparameters
     """
     if model_type == 'decision_tree':
-        return optimize_decision_tree(X, y, n_trials, n_splits, random_state, prices)
+        return optimize_decision_tree(X, y, prices, n_trials, n_splits, random_state)
     elif model_type == 'random_forest':
         return optimize_random_forest(X, y, prices, n_trials, n_splits, random_state)
     elif model_type == 'xgboost':

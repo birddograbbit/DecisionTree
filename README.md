@@ -8,15 +8,13 @@ An advanced ensemble-based machine learning trading system for S&P 500 stocks wi
 The system has evolved into a sophisticated trading platform with the following **completed features**:
 
 ✅ **Multi-Model Support**: Decision Tree, Random Forest, XGBoost, and Stacking ensembles  
-✅ **Strategy Framework**: TrendFollowing and RegimeAdaptive strategies
-✅ **Meta-Strategy Switching**: Performance tracking with regime-based overrides
-✅ **Hyperparameter Optimization**: Automated optimization with Optuna
+✅ **Strategy Framework**: TrendFollowing and RegimeAdaptive strategies  
+✅ **Hyperparameter Optimization**: Automated optimization with Optuna  
 ✅ **Feature Engineering**: Advanced feature auditing and pruning capabilities  
-✅ **Market Regime Detection**: Multi-method regime identification and adaptation  
-✅ **Performance Analysis**: Comprehensive backtesting and visualization  
+✅ **Market Regime Detection**: Multi-method regime identification and adaptation 
+✅ **Performance Analysis**: Comprehensive backtesting and visualization
 ✅ **Modular Architecture**: Engine-based design with clear separation of concerns
-
-The meta-strategy includes a `performance_regime` selection method that combines recent performance with market regime detection, allowing regime changes to trigger immediate strategy switches.
+✅ **Hybrid ML + Momentum Strategy**: Combine ML predictions with momentum signals
 
 ### Success Metrics
 - **CAGR/Max Drawdown ratio** > 0.40 (vs S&P 500's ~0.18)
@@ -70,6 +68,15 @@ ls data/raw/historical_data_STOCK_SPY_1_day*.csv
 ```
 
 If data files are missing, the system will attempt to load from any CSV files in the data directory containing "SPY".
+
+### Intraday 5-Minute Models
+
+The platform includes an intraday feature set with time-of-day signals, short-window RSI/EMA, rolling volatility, and lagged returns.
+Ensure 5‑minute historical CSV files are available under `data/raw/` with names like `historical_data_STOCK_SPY_5_mins_2023-2024.csv`. Run any ML strategy on 5‑minute data by specifying the timeframe:
+
+```bash
+python strategy_runner.py --data data/raw --model random_forest --timeframe 5min --output rf_5min
+```
 
 ### Level 1: Basic Functionality Tests
 
@@ -191,6 +198,16 @@ python strategy_runner.py --data data/raw --model random_forest --calibrate --ou
 ```bash
 # Test different position sizing approaches (configured in strategy_configs.py)
 python strategy_runner.py --data data/raw --model xgboost --output xgb_confidence_test
+```
+
+#### 3.5 Meta-Strategy Parameter Tuning
+```bash
+# Run meta-strategy with custom tuning parameters
+python strategy_runner.py --data data/raw --model meta_strategy --timeframe 5min \
+    --performance-window 390 --switch-cooldown 78 --output meta_tuned
+
+# Sweep common combinations and save summary CSV
+python meta_strategy_perf_test/param_sweep.py
 ```
 
 ### Level 4: Integration & End-to-End Testing
@@ -486,3 +503,11 @@ For live trading (Phase 3), configure IBKR:
 ---
 
 **Note**: This is an active development project currently in Phase 1.5 of the v0.2 roadmap. Critical issues as of 2025-06-05 have been resolved. For issues or contributions, see the development documentation in the main strategy file.
+### Hybrid ML + Momentum Example
+
+Run the default XGBoost + TEMA hybrid on 5‑minute data:
+
+```bash
+python strategy_runner.py --data data/raw --model hybrid_momentum --timeframe 5min --output hybrid_run
+```
+

@@ -12,6 +12,8 @@ from src.strategies.base_strategy import BaseStrategy
 from src.strategies.trend_following import TrendFollowingStrategy
 from src.strategies.regime_adaptive_strategy import RegimeAdaptiveStrategy
 from src.strategies.adapters import BBRSIADXAdapter, TEMAAdapter, QuodAdapter
+from src.strategies.hybrid_momentum_strategy import HybridMomentumMLStrategy
+from src.strategies.multi_timeframe_strategy import MultiTimeframeStrategy
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -33,6 +35,8 @@ class StrategyRegistry:
         'bb_rsi_adx': BBRSIADXAdapter,
         'tema': TEMAAdapter,
         'quod': QuodAdapter,
+        'hybrid_momentum': HybridMomentumMLStrategy,
+        'multi_timeframe': MultiTimeframeStrategy,
     }
     
     # Aliases for backward compatibility and convenience

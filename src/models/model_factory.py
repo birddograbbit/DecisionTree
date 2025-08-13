@@ -321,7 +321,7 @@ class ModelFactory:
             raise ValueError(f"Unknown model type: {model_type}")
 
     @classmethod
-    def create_optimized_model(cls, model_type, X=None, y=None, n_trials=None, regime=None, 
+    def create_optimized_model(cls, model_type, X=None, y=None, prices=None, n_trials=None, regime=None,
                                force_optimization=False):
         """
         Create a model with optimized hyperparameters using HyperparameterManager.
@@ -353,8 +353,8 @@ class ModelFactory:
         ValueError
             If force_optimization=True but X or y is None
         """
-        if force_optimization and (X is None or y is None):
-            raise ValueError("X and y must be provided when force_optimization=True")
+        if force_optimization and (X is None or y is None or prices is None):
+            raise ValueError("X, y, and prices must be provided when force_optimization=True")
             
         if not OPTUNA_AVAILABLE and force_optimization:
             raise ImportError("Optuna is not installed. Cannot optimize hyperparameters.")
@@ -364,6 +364,7 @@ class ModelFactory:
             model_type=model_type,
             X=X,
             y=y,
+            prices=prices,
             regime=regime,
             force_optimization=force_optimization,
             n_trials=n_trials

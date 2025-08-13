@@ -142,7 +142,7 @@ def run_feature_audit(data_path, output_dir, model_type='random_forest',
     df_features = add_technical_indicators(df, lookback_period)
     
     # Engineer features with appropriate lookback
-    X, y, dates = engineer_features(df_features, lookback_period)
+    X, y, dates = engineer_features(df_features, lookback_period, timeframe=timeframe)
     
     # Split data for audit (using 70/30 split)
     train_size = int(len(X) * 0.7)
@@ -343,6 +343,7 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
     # Set symbol for all configs and feature audit settings
     for config in strategy_configs:
         config['symbol'] = symbol
+        config['timeframe'] = timeframe
         if use_optimized_params:
             config['use_optimized'] = True
         if run_feature_audit_flag:
@@ -359,7 +360,9 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         print(f"\n=== Running strategy: {config['name']} ===")
 
         # Determine strategy type from config name
-        if 'meta_strategy' in config['name'].lower():
+        if config.get('model_type') == 'multi_timeframe' or 'multi_timeframe' in config['name'].lower():
+            strategy_type = 'multi_timeframe'
+        elif 'meta_strategy' in config['name'].lower():
             strategy_type = 'meta_strategy'
             # Dynamically import and register meta-strategy if needed
             if 'meta_strategy' not in StrategyRegistry.list_strategies():
@@ -541,16 +544,24 @@ def get_strategy_configs(use_optimized_params=False, include_momentum=False, tim
         List of strategy configurations
     """
     # Use predefined strategy configurations from strategy_configs.py
-    strategy_configs = [
-        STRATEGY_CONFIGS['decision_tree'].copy(),
-        STRATEGY_CONFIGS['decision_tree_calibrated'].copy(),
-        STRATEGY_CONFIGS['random_forest'].copy(),
-        STRATEGY_CONFIGS['random_forest_calibrated'].copy(),
-        STRATEGY_CONFIGS['xgboost_fixed'].copy(),
-        STRATEGY_CONFIGS['xgboost_confidence'].copy(),
-        STRATEGY_CONFIGS['stacking'].copy(),
-        STRATEGY_CONFIGS['regime_adaptive_rf'].copy()
-    ]
+    if timeframe == '5min':
+        strategy_configs = [
+            STRATEGY_CONFIGS['decision_tree_5min'].copy(),
+            STRATEGY_CONFIGS['random_forest_5min'].copy(),
+            STRATEGY_CONFIGS['xgboost_5min'].copy(),
+            STRATEGY_CONFIGS['transformer_5min'].copy(),
+        ]
+    else:
+        strategy_configs = [
+            STRATEGY_CONFIGS['decision_tree'].copy(),
+            STRATEGY_CONFIGS['decision_tree_calibrated'].copy(),
+            STRATEGY_CONFIGS['random_forest'].copy(),
+            STRATEGY_CONFIGS['random_forest_calibrated'].copy(),
+            STRATEGY_CONFIGS['xgboost_fixed'].copy(),
+            STRATEGY_CONFIGS['xgboost_confidence'].copy(),
+            STRATEGY_CONFIGS['stacking'].copy(),
+            STRATEGY_CONFIGS['regime_adaptive_rf'].copy()
+        ]
     
     # Add momentum strategies if requested
     if include_momentum:
@@ -582,9 +593,10 @@ def get_strategy_configs(use_optimized_params=False, include_momentum=False, tim
 
 def run_single_strategy(data_path, model_type='random_forest', output_dir='results',
                        train_end_date=None, symbol='SPY', strategy_type='trend_following',
-                       calibrate=False, use_optimized_params=False, 
+                       calibrate=False, use_optimized_params=False,
                        run_feature_audit_flag=False, audit_model='random_forest',
-                       top_n_features=None, timeframe='daily'):
+                       top_n_features=None, timeframe='daily',
+                       performance_window=None, switch_cooldown=None):
     """
     Run a single strategy with specified parameters.
     
@@ -613,7 +625,11 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         Model type to use for feature importance evaluation
     top_n_features : int, optional
         Number of top features to keep after auditing
-        
+    performance_window : int, optional
+        Lookback window (in bars) for meta-strategy performance tracking
+    switch_cooldown : int, optional
+        Minimum bars between meta-strategy switches
+
     Returns:
     --------
     dict
@@ -655,20 +671,29 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         # For momentum strategies, use the model type as the strategy type
         strategy_type = model_type
         config_key = None  # Will create custom config below
+    elif model_type == 'hybrid_momentum':
+        strategy_type = 'hybrid_momentum'
+        config_key = 'hybrid_xgb_tema_5min'
     else:
         # Select appropriate configuration from STRATEGY_CONFIGS for ML models
         config_key = None
         
         if model_type == 'decision_tree':
-            config_key = 'decision_tree_calibrated' if calibrate else 'decision_tree'
+            if timeframe == '5min':
+                config_key = 'decision_tree_5min'
+            else:
+                config_key = 'decision_tree_calibrated' if calibrate else 'decision_tree'
         elif model_type == 'random_forest':
-            config_key = 'random_forest_calibrated' if calibrate else 'random_forest'
+            if timeframe == '5min':
+                config_key = 'random_forest_5min'
+            else:
+                config_key = 'random_forest_calibrated' if calibrate else 'random_forest'
         elif model_type == 'xgboost':
-            config_key = 'xgboost_confidence'  # Default to confidence-based position sizing
+            config_key = 'xgboost_5min' if timeframe == '5min' else 'xgboost_confidence'
         elif model_type == 'stacking':
             config_key = 'stacking'
         elif model_type in ['transformer', 'hybrid']:
-            config_key = None
+            config_key = 'transformer_5min' if (model_type == 'transformer' and timeframe == '5min') else None
         
         if strategy_type == 'regime_adaptive' and model_type == 'random_forest':
             config_key = 'regime_adaptive_rf'
@@ -708,12 +733,12 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
                 'primary_timeframe': '5T'  # 5-minute default for Quod
             })
         elif model_type == 'meta_strategy':
-            config.update({
-                'selection_method': 'performance',
-                'performance_window': 100,
-                'switch_cooldown': 20,
-                'strategies': ['quod', 'tema', 'bb_rsi_adx']
-            })
+            config = STRATEGY_CONFIGS.get('meta_strategy', {}).copy()
+            if performance_window is not None:
+                config['performance_window'] = performance_window
+            if switch_cooldown is not None:
+                config['switch_cooldown'] = switch_cooldown
+            config.setdefault('strategies', ['quod', 'tema', 'bb_rsi_adx'])
             # Dynamically import and register meta-strategy if needed
             if 'meta_strategy' not in StrategyRegistry.list_strategies():
                 from src.strategies.meta_strategy import MetaStrategy
@@ -735,6 +760,7 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     
     # Set symbol and feature audit settings
     config['symbol'] = symbol
+    config['timeframe'] = timeframe
     
     # Set optimized parameters flag
     if use_optimized_params:
@@ -891,7 +917,7 @@ def parse_arguments():
     
     parser.add_argument('--model', type=str,
                         choices=['decision_tree', 'random_forest', 'xgboost', 'stacking', 'transformer', 'hybrid',
-                                 'bb_rsi_adx', 'tema', 'quod', 'meta_strategy'],
+                                 'bb_rsi_adx', 'tema', 'quod', 'meta_strategy', 'hybrid_momentum'],
                         default='random_forest',
                         help='Model type for single mode (default: random_forest)')
     
@@ -933,10 +959,15 @@ def parse_arguments():
     parser.add_argument('--include-momentum', action='store_true',
                         help='Include momentum strategies (BB-RSI-ADX, TEMA, Quod) in comparison mode')
     
-    parser.add_argument('--timeframe', 
-                        choices=['daily', '5min'], 
+    parser.add_argument('--timeframe',
+                        choices=['daily', '5min'],
                         default='daily',
                         help='Data timeframe to use (default: daily)')
+
+    parser.add_argument('--performance-window', type=int, default=None,
+                        help='Performance window for meta-strategy (bars)')
+    parser.add_argument('--switch-cooldown', type=int, default=None,
+                        help='Switch cooldown for meta-strategy (bars)')
     
     return parser.parse_args()
 
@@ -969,7 +1000,9 @@ def main():
             run_feature_audit_flag=args.feature_audit,
             audit_model=args.audit_model,
             top_n_features=args.top_features,
-            timeframe=args.timeframe
+            timeframe=args.timeframe,
+            performance_window=args.performance_window,
+            switch_cooldown=args.switch_cooldown
         )
     else:  # compare mode
         run_strategy_comparison(

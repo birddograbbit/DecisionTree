@@ -48,6 +48,8 @@ class MetaStrategy(BaseStrategy):
         self.selection_method = self.config.get('selection_method', 'performance')
         self.performance_window = self.config.get('performance_window', 100)
         self.switch_cooldown = self.config.get('switch_cooldown', 20)
+        # When True, regime signals can override performance-based selection
+        self.regime_override = self.config.get('regime_override', False)
         
         # Initialize strategy registry
         self.registry = StrategyRegistry()
@@ -73,8 +75,8 @@ class MetaStrategy(BaseStrategy):
         self.current_strategy = self.available_strategies[self.current_strategy_name]
         self.bars_since_switch = 0
         
-        # Regime detection (for regime-based selection or overrides)
-        if self.selection_method in {'regime', 'performance_regime'}:
+        # Regime detection (for regime-based selection or override)
+        if self.selection_method == 'regime' or self.regime_override:
             self.regime_detector = RegimeDetector(
                 method=self.config.get('regime_method', 'trend_volatility')
             )
@@ -199,7 +201,20 @@ class MetaStrategy(BaseStrategy):
         logger.debug(f"Selecting strategy using method: {self.selection_method}")
         
         if self.selection_method == 'performance':
-            return self._select_by_performance()
+            selected = self._select_by_performance()
+            if self.regime_override and hasattr(self, 'regime_detector'):
+                try:
+                    current_regime = self.regime_detector.get_current_regime()
+                    regime_label = current_regime.get('regime_label', 'neutral')
+                    override = self.regime_map.get(regime_label)
+                    if override and override in self.available_strategies \
+                            and override != selected and regime_label != 'neutral':
+                        logger.info(
+                            f"Regime override: {regime_label} -> {override}")
+                        return override
+                except Exception as e:
+                    logger.error(f"Error in regime override: {e}")
+            return selected
         elif self.selection_method == 'regime':
             return self._select_by_regime(features, dates)
         elif self.selection_method == 'performance_regime':

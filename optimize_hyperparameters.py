@@ -155,15 +155,16 @@ def prepare_features_and_target(df, lookback_period=None):
     # Remove rows with NaN values
     df = df.dropna()
     
-    # Extract features and target
+    # Extract features, target, and aligned price series for backtesting
     X = df[features]
     y = df['target']
-    
+    prices = df['close'].copy()
+
     print(f"Features prepared. X shape: {X.shape}, y shape: {y.shape}")
     print(f"Features: {features}")
     print(f"Target distribution: {y.value_counts(normalize=True)}")
-    
-    return X, y
+
+    return X, y, prices
 
 def detect_regimes(df, method='trend_volatility'):
     """
@@ -216,8 +217,8 @@ def optimize_hyperparameters(args):
     # Load data
     df = load_data(args.data, args.symbol)
     
-    # Prepare features and target
-    X, y = prepare_features_and_target(df, args.lookback)
+    # Prepare features, target, and price series
+    X, y, prices = prepare_features_and_target(df, args.lookback)
     
     # Create hyperparameter manager
     hyperparam_manager = HyperparameterManager(args.output)
@@ -240,6 +241,7 @@ def optimize_hyperparameters(args):
             regime_models = hyperparam_manager.get_regime_specific_models(
                 X=X,
                 y=y,
+                prices=prices,
                 model_type=model_type,
                 regimes=regimes,
                 force_optimization=True,
@@ -270,6 +272,7 @@ def optimize_hyperparameters(args):
                 model_type=model_type,
                 X=X,
                 y=y,
+                prices=prices,
                 n_trials=args.trials
             )
             

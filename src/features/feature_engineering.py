@@ -195,7 +195,7 @@ def engineer_features(df, lookback_period=10, timeframe: str = 'daily'):
         'plus_di', 'minus_di'
     ]
 
-    if timeframe == '5min':
+    if timeframe in ['5min', '1min']:
         # Add intraday-specific features
         df_features['hour'] = df_features.index.hour
         df_features['minute'] = df_features.index.minute
@@ -496,7 +496,7 @@ def prepare_train_test_data(df, train_end_date=None, prune_features_flag=False,
         (X_train, X_test, y_train, y_test, dates_train, dates_test, scaler)
     """
     # Determine lookback based on timeframe
-    lookback = config.LOOKBACK_PERIOD_5MIN if timeframe == '5min' else config.LOOKBACK_PERIOD
+    lookback = config.LOOKBACK_PERIOD_5MIN if timeframe in ['5min', '1min'] else config.LOOKBACK_PERIOD
 
     # Add technical indicators
     df_features = add_technical_indicators(df, lookback)

@@ -16,7 +16,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-from src.data.preprocessing import preprocess_data, load_5min_data
+from src.data.preprocessing import preprocess_data, load_5min_data, load_1min_data
 from src.strategies.trend_following import TrendFollowingStrategy
 from src.strategies.regime_adaptive_strategy import RegimeAdaptiveStrategy
 from src.strategies.strategy_registry import StrategyRegistry
@@ -44,25 +44,28 @@ def load_data(data_path, symbol='SPY', timeframe='daily'):
     symbol : str, default='SPY'
         Symbol for the data
     timeframe : str, default='daily'
-        Data timeframe - 'daily' or '5min'
+        Data timeframe - 'daily', '5min', or '1min'
         
     Returns:
     --------
     pd.DataFrame
         Preprocessed price data
     """
-    # Handle 5-minute data specifically
-    if timeframe == '5min':
-        # Use specific 5-minute data files
-        train_file = os.path.join(data_path, f'historical_data_STOCK_{symbol}_5_mins_2023-2024.csv')
-        test_file = os.path.join(data_path, f'historical_data_STOCK_{symbol}_5_mins_2025.csv')
-        
+    # Handle intraday data specifically
+    if timeframe in ['5min', '1min']:
+        if timeframe == '5min':
+            train_file = os.path.join(data_path, f'historical_data_STOCK_{symbol}_5_mins_2023-2024.csv')
+            test_file = os.path.join(data_path, f'historical_data_STOCK_{symbol}_5_mins_2025.csv')
+            loader = load_5min_data
+        else:
+            train_file = os.path.join(data_path, f'historical_data_INDEX_{symbol}_1_min_2023-2024.csv')
+            test_file = os.path.join(data_path, f'historical_data_INDEX_{symbol}_1_min_2025.csv')
+            loader = load_1min_data
+
         if not os.path.exists(train_file) or not os.path.exists(test_file):
-            raise FileNotFoundError(f"5-minute data files not found for {symbol}")
-        
-        # Use the dedicated 5-minute data loading function
-        df = load_5min_data(train_file, test_file)
-        # Don't preprocess again as load_5min_data already handles it
+            raise FileNotFoundError(f"{timeframe} data files not found for {symbol}")
+
+        df = loader(train_file, test_file)
         return df
     
     # Original logic for daily data
@@ -135,8 +138,9 @@ def run_feature_audit(data_path, output_dir, model_type='random_forest',
         top_n_features = config.TOP_N_FEATURES
     
     # Determine lookback period based on timeframe
-    lookback_period = config.LOOKBACK_PERIOD_5MIN if timeframe == '5min' else config.LOOKBACK_PERIOD
-    print(f"Using lookback period: {lookback_period} {'bars' if timeframe == '5min' else 'days'}")
+    intraday = timeframe in ['5min', '1min']
+    lookback_period = config.LOOKBACK_PERIOD_5MIN if intraday else config.LOOKBACK_PERIOD
+    print(f"Using lookback period: {lookback_period} {'bars' if intraday else 'days'}")
     
     # Add technical indicators with appropriate lookback
     df_features = add_technical_indicators(df, lookback_period)
@@ -536,7 +540,7 @@ def get_strategy_configs(use_optimized_params=False, include_momentum=False, tim
     include_momentum : bool
         Whether to include momentum strategies
     timeframe : str
-        Data timeframe - 'daily' or '5min'
+        Data timeframe - 'daily', '5min', or '1min'
         
     Returns:
     --------
@@ -544,7 +548,7 @@ def get_strategy_configs(use_optimized_params=False, include_momentum=False, tim
         List of strategy configurations
     """
     # Use predefined strategy configurations from strategy_configs.py
-    if timeframe == '5min':
+    if timeframe in ['5min', '1min']:
         strategy_configs = [
             STRATEGY_CONFIGS['decision_tree_5min'].copy(),
             STRATEGY_CONFIGS['random_forest_5min'].copy(),
@@ -565,7 +569,7 @@ def get_strategy_configs(use_optimized_params=False, include_momentum=False, tim
     
     # Add momentum strategies if requested
     if include_momentum:
-        if timeframe == '5min':
+        if timeframe in ['5min', '1min']:
             # Use 5-minute optimized configurations
             strategy_configs.extend([
                 STRATEGY_CONFIGS['bb_rsi_adx_5min'].copy(),
@@ -665,7 +669,7 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     print(f"Testing data: {len(test_data)} rows ({test_data.index[0]} to {test_data.index[-1]})")
     
     # Check if model_type is a momentum strategy or meta-strategy
-    momentum_strategies = ['bb_rsi_adx', 'tema', 'quod', 'meta_strategy']
+    momentum_strategies = ['bb_rsi_adx', 'tema', 'quod', 'jfk_dsrsi', 'mpo_3tf', 'meta_strategy']
     
     if model_type in momentum_strategies:
         # For momentum strategies, use the model type as the strategy type
@@ -679,21 +683,21 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         config_key = None
         
         if model_type == 'decision_tree':
-            if timeframe == '5min':
+            if timeframe in ['5min', '1min']:
                 config_key = 'decision_tree_5min'
             else:
                 config_key = 'decision_tree_calibrated' if calibrate else 'decision_tree'
         elif model_type == 'random_forest':
-            if timeframe == '5min':
+            if timeframe in ['5min', '1min']:
                 config_key = 'random_forest_5min'
             else:
                 config_key = 'random_forest_calibrated' if calibrate else 'random_forest'
         elif model_type == 'xgboost':
-            config_key = 'xgboost_5min' if timeframe == '5min' else 'xgboost_confidence'
+            config_key = 'xgboost_5min' if timeframe in ['5min', '1min'] else 'xgboost_confidence'
         elif model_type == 'stacking':
             config_key = 'stacking'
         elif model_type in ['transformer', 'hybrid']:
-            config_key = 'transformer_5min' if (model_type == 'transformer' and timeframe == '5min') else None
+            config_key = 'transformer_5min' if (model_type == 'transformer' and timeframe in ['5min', '1min']) else None
         
         if strategy_type == 'regime_adaptive' and model_type == 'random_forest':
             config_key = 'regime_adaptive_rf'
@@ -702,38 +706,16 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     if config_key and config_key in STRATEGY_CONFIGS:
         config = STRATEGY_CONFIGS[config_key].copy()
     elif model_type in momentum_strategies:
-        # Create configuration for momentum strategies
-        config = {
-            'name': model_type.upper().replace('_', '-'),
-            'symbol': symbol,
-            'position_size': 0.1,
-            'primary_timeframe': '1h'  # Default timeframe
-        }
-        
-        # Add strategy-specific default parameters
-        if model_type == 'bb_rsi_adx':
-            config.update({
-                'bb_period': 20,
-                'rsi_period': 14,
-                'adx_primary_threshold': 20,
-                'adx_secondary_threshold': 40
-            })
-        elif model_type == 'tema':
-            config.update({
-                'tema_primary_fast': 10,
-                'tema_primary_slow': 80,
-                'adx_threshold': 40,
-                'use_dual_timeframe': True
-            })
-        elif model_type == 'quod':
-            config.update({
-                'use_stoch_reversal': True,
-                'use_stoch_pullback': True,
-                'use_d60_trend_exit': True,
-                'primary_timeframe': '5T'  # 5-minute default for Quod
-            })
-        elif model_type == 'meta_strategy':
-            config = STRATEGY_CONFIGS.get('meta_strategy', {}).copy()
+        config = STRATEGY_CONFIGS.get(model_type, {}).copy()
+        if not config:
+            config = {
+                'name': model_type.upper().replace('_', '-'),
+                'symbol': symbol,
+                'position_size': 0.1,
+                'primary_timeframe': '1h'
+            }
+        config.setdefault('symbol', symbol)
+        if model_type == 'meta_strategy':
             if performance_window is not None:
                 config['performance_window'] = performance_window
             if switch_cooldown is not None:
@@ -917,7 +899,7 @@ def parse_arguments():
     
     parser.add_argument('--model', type=str,
                         choices=['decision_tree', 'random_forest', 'xgboost', 'stacking', 'transformer', 'hybrid',
-                                 'bb_rsi_adx', 'tema', 'quod', 'meta_strategy', 'hybrid_momentum'],
+                                 'bb_rsi_adx', 'tema', 'quod', 'jfk_dsrsi', 'mpo_3tf', 'meta_strategy', 'hybrid_momentum'],
                         default='random_forest',
                         help='Model type for single mode (default: random_forest)')
     
@@ -960,7 +942,7 @@ def parse_arguments():
                         help='Include momentum strategies (BB-RSI-ADX, TEMA, Quod) in comparison mode')
     
     parser.add_argument('--timeframe',
-                        choices=['daily', '5min'],
+                        choices=['daily', '5min', '1min'],
                         default='daily',
                         help='Data timeframe to use (default: daily)')
 

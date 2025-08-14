@@ -4,8 +4,8 @@ import pandas as pd
 from src.features.feature_engineering import engineer_features
 
 
-def _make_intraday_dataframe(rows: int = 100) -> pd.DataFrame:
-    index = pd.date_range('2024-01-02 09:30', periods=rows, freq='5min')
+def _make_intraday_dataframe(rows: int = 100, freq: str = '5min') -> pd.DataFrame:
+    index = pd.date_range('2024-01-02 09:30', periods=rows, freq=freq)
     base = np.arange(rows, dtype=float)
     data = pd.DataFrame({
         'open': base,
@@ -33,6 +33,15 @@ def _make_daily_dataframe(rows: int = 100) -> pd.DataFrame:
 def test_engineer_features_adds_intraday_columns():
     df = _make_intraday_dataframe()
     X, y, dates = engineer_features(df, lookback_period=5, timeframe='5min')
+    expected = {
+        'hour', 'minute', 'ema_5', 'rsi_5', 'volatility_5', 'lag_return_1', 'lag_return_3'
+    }
+    assert expected.issubset(set(X.columns))
+
+
+def test_engineer_features_adds_intraday_columns_1min():
+    df = _make_intraday_dataframe(freq='1min')
+    X, y, dates = engineer_features(df, lookback_period=5, timeframe='1min')
     expected = {
         'hour', 'minute', 'ema_5', 'rsi_5', 'volatility_5', 'lag_return_1', 'lag_return_3'
     }

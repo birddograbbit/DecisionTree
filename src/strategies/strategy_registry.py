@@ -11,7 +11,13 @@ from typing import Dict, Type, Optional, List
 from src.strategies.base_strategy import BaseStrategy
 from src.strategies.trend_following import TrendFollowingStrategy
 from src.strategies.regime_adaptive_strategy import RegimeAdaptiveStrategy
-from src.strategies.adapters import BBRSIADXAdapter, TEMAAdapter, QuodAdapter
+from src.strategies.adapters import (
+    BBRSIADXAdapter,
+    TEMAAdapter,
+    QuodAdapter,
+    JFKDSRSIAdapter,
+    MPO3TFAdapter,
+)
 from src.strategies.hybrid_momentum_strategy import HybridMomentumMLStrategy
 from src.strategies.multi_timeframe_strategy import MultiTimeframeStrategy
 
@@ -35,6 +41,8 @@ class StrategyRegistry:
         'bb_rsi_adx': BBRSIADXAdapter,
         'tema': TEMAAdapter,
         'quod': QuodAdapter,
+        'jfk_dsrsi': JFKDSRSIAdapter,
+        'mpo_3tf': MPO3TFAdapter,
         'hybrid_momentum': HybridMomentumMLStrategy,
         'multi_timeframe': MultiTimeframeStrategy,
     }
@@ -45,6 +53,8 @@ class StrategyRegistry:
         'trend': 'trend_following',
         'regime': 'regime_adaptive',
         'adaptive': 'regime_adaptive',
+        'jfk': 'jfk_dsrsi',
+        'mpo': 'mpo_3tf',
     }
     
     # Performance tracking for strategies (optional)

@@ -49,13 +49,19 @@ These scripts contain the indicator calculations, signal rules, and ATR-based ri
      ```bash
      python strategy_runner.py --data data/raw --model jfk_dsrsi --mode single --output results_jfk_5m --timeframe 5min --symbol SPY
      python strategy_runner.py --data data/raw --model jfk_dsrsi --mode single --output results_jfk_1m --timeframe 1min --symbol SPX
-     python strategy_runner.py --data data/raw --model mpo_3tf --mode single --output results_mpo_5m --timeframe 5min --symbol SPY
-     python strategy_runner.py --data data/raw --model mpo_3tf --mode single --output results_mpo_1m --timeframe 1min --symbol SPX
-     ```
+    python strategy_runner.py --data data/raw --model mpo_3tf --mode single --output results_mpo_5m --timeframe 5min --symbol SPY
+    python strategy_runner.py --data data/raw --model mpo_3tf --mode single --output results_mpo_1m --timeframe 1min --symbol SPX
+    ```
 
 6. **Documentation and Meta-Strategy Integration**
    - Update project documentation to describe the strategies, their parameters, and usage examples.
    - Add mappings so `MetaStrategy` can select these strategies; regime definitions will need to be extended.
+
+### Updated CLI Options
+
+- `--asset-type` to specify `STOCK` or `INDEX`
+- `--train-data` and `--test-data` for explicit file paths
+- Timestamps are normalized to timezone-naive UTC during loading
 
 ## Open Questions
 - **Default Parameters:** final hyper‑optimized parameter sets for 1‑minute and 5‑minute operation will be supplied later.

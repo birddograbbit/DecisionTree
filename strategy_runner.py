@@ -11,6 +11,8 @@ This script provides functionality to:
 
 import os
 import argparse
+import glob
+import re
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -33,7 +35,43 @@ from src.features.feature_engineering import (
 from strategy_configs import STRATEGY_CONFIGS
 import config
 
-def load_data(data_path, symbol='SPY', timeframe='daily'):
+def find_data_files(data_dir, symbol, timeframe, train_files=None, test_files=None, asset_type=None):
+    """Discover train/test data files based on patterns."""
+    if train_files and test_files:
+        return train_files if isinstance(train_files, list) else [train_files], \
+               test_files if isinstance(test_files, list) else [test_files]
+
+    tf_pattern = '5_mins' if timeframe == '5min' else '1_min'
+    pattern = f"historical_data_*_{symbol}_{tf_pattern}_*.csv"
+    files = glob.glob(os.path.join(data_dir, pattern))
+    if asset_type:
+        files = [f for f in files if f"_{asset_type.upper()}_" in os.path.basename(f)]
+    if not files:
+        raise FileNotFoundError(f"No {timeframe} files found for {symbol} in {data_dir}")
+
+    def extract_start(f):
+        m = re.search(r'_(\d{4}[A-Za-z]*\d*)-\d', os.path.basename(f))
+        return m.group(1) if m else os.path.basename(f)
+
+    files.sort(key=extract_start)
+    if len(files) == 1:
+        return [files[0]], [files[0]]
+    return files[:-1], [files[-1]]
+
+
+def validate_data_files(file_paths):
+    """Basic validation for data files."""
+    for path in file_paths:
+        df = pd.read_csv(path)
+        if 'date' in df.columns:
+            dates = pd.to_datetime(df['date'], utc=True)
+            if not dates.is_monotonic_increasing:
+                print(f"Warning: timestamps not increasing in {path}")
+            if dates.dt.tz is not None:
+                print(f"Warning: timezone-aware timestamps in {path}")
+
+
+def load_data(data_path, symbol='SPY', timeframe='daily', train_data=None, test_data=None, asset_type=None):
     """
     Load and preprocess historical price data.
     
@@ -53,25 +91,19 @@ def load_data(data_path, symbol='SPY', timeframe='daily'):
     """
     # Handle intraday data specifically
     if timeframe in ['5min', '1min']:
-        if timeframe == '5min':
-            train_file = os.path.join(data_path, f'historical_data_STOCK_{symbol}_5_mins_2023-2024.csv')
-            test_file = os.path.join(data_path, f'historical_data_STOCK_{symbol}_5_mins_2025.csv')
-            loader = load_5min_data
-        else:
-            train_file = os.path.join(data_path, f'historical_data_STOCK_{symbol}_1_min_2022Aug-2024Aug.csv')
-            test_file = os.path.join(data_path, f'historical_data_STOCK_{symbol}_1_min_2024Aug-2025Aug.csv')
-            loader = load_1min_data
-
-        if not os.path.exists(train_file) or not os.path.exists(test_file):
-            raise FileNotFoundError(f"{timeframe} data files not found for {symbol}")
-
-        df = loader(train_file, test_file)
+        train_files, test_files = find_data_files(
+            data_path, symbol, timeframe, train_data, test_data, asset_type
+        )
+        validate_data_files(train_files + test_files)
+        loader = load_5min_data if timeframe == '5min' else load_1min_data
+        df = loader(train_files, test_files)
         return df
     
     # Original logic for daily data
     if os.path.isfile(data_path):
         # Load data from single file
         df = pd.read_csv(data_path, index_col=0, parse_dates=True)
+        df.index = pd.to_datetime(df.index, utc=True).tz_convert('UTC').tz_localize(None)
     else:
         # Look for CSV files in the directory
         csv_files = [f for f in os.listdir(data_path) if f.endswith('.csv') and symbol in f and '5_mins' not in f]
@@ -83,7 +115,9 @@ def load_data(data_path, symbol='SPY', timeframe='daily'):
         dfs = []
         for file in csv_files:
             file_path = os.path.join(data_path, file)
-            dfs.append(pd.read_csv(file_path, index_col=0, parse_dates=True))
+            temp = pd.read_csv(file_path, index_col=0, parse_dates=True)
+            temp.index = pd.to_datetime(temp.index, utc=True).tz_convert('UTC').tz_localize(None)
+            dfs.append(temp)
         
         df = pd.concat(dfs)
         
@@ -129,9 +163,16 @@ def run_feature_audit(data_path, output_dir, model_type='random_forest',
     os.makedirs(audit_dir, exist_ok=True)
     
     print(f"\n=== Running Feature Audit with {model_type} ===")
-    
+
     # Load and prepare data
-    df = load_data(data_path, symbol=symbol, timeframe=timeframe)
+    df = load_data(
+        data_path,
+        symbol=symbol,
+        timeframe=timeframe,
+        train_data=train_data,
+        test_data=test_data,
+        asset_type=asset_type,
+    )
     
     # Use config default if not specified
     if top_n_features is None:
@@ -183,7 +224,7 @@ def run_feature_audit(data_path, output_dir, model_type='random_forest',
         print(f"Found {len(correlated_pairs)} highly correlated feature pairs:")
         for feat1, feat2, corr in correlated_pairs:
             print(f"  {feat1} and {feat2}: {corr:.3f}")
-        
+
         # Save collinearity results
         with open(os.path.join(audit_dir, 'collinearity_analysis.txt'), 'w') as f:
             f.write("Highly Correlated Feature Pairs:\n")
@@ -192,37 +233,48 @@ def run_feature_audit(data_path, output_dir, model_type='random_forest',
                 f.write(f"{feat1} and {feat2}: {corr:.3f}\n")
     else:
         print("No highly correlated features found.")
-    
-    # Train model for feature importance analysis
-    print(f"\n--- Training {model_type} for Feature Importance ---")
-    model = ModelFactory.create_model(model_type)
-    model.train(X_train, y_train)
-    
-    # Perform feature audit
-    print(f"--- Running Permutation Importance Analysis ---")
-    train_imp, test_imp, top_features = audit_features(
-        model,
-        X_train,
-        y_train,
-        X_test,
-        y_test,
-        n_repeats=config.FEATURE_AUDIT_N_REPEATS,
-        n_top_features=top_n_features,
-        random_state=config.RANDOM_STATE
-    )
-    
-    print(f"\nTop {len(top_features)} features selected:")
-    for i, feature in enumerate(top_features, 1):
-        importance = test_imp[test_imp['feature'] == feature]['importance_mean'].iloc[0]
-        print(f"  {i:2d}. {feature}: {importance:.4f}")
-    
-    # Save audit results
-    train_imp.to_csv(os.path.join(audit_dir, 'train_importance.csv'), index=False)
-    test_imp.to_csv(os.path.join(audit_dir, 'test_importance.csv'), index=False)
-    
-    with open(os.path.join(audit_dir, 'top_features.txt'), 'w') as f:
-        for feature in top_features:
-            f.write(f"{feature}\n")
+
+    momentum_strategies = {
+        'bb_rsi_adx', 'tema', 'quod', 'jfk_dsrsi', 'mpo_3tf'
+    }
+    if model_type in momentum_strategies:
+        print(f"Feature audit not applicable for momentum strategy {model_type}")
+        audit_results = {}
+        top_features = []
+        if audit_only:
+            return top_features, audit_results
+        return X_train, X_test, y_train, y_test, audit_results
+    else:
+        # Train model for feature importance analysis
+        print(f"\n--- Training {model_type} for Feature Importance ---")
+        model = ModelFactory.create_model(model_type)
+        model.train(X_train, y_train)
+
+        # Perform feature audit
+        print(f"--- Running Permutation Importance Analysis ---")
+        train_imp, test_imp, top_features = audit_features(
+            model,
+            X_train,
+            y_train,
+            X_test,
+            y_test,
+            n_repeats=config.FEATURE_AUDIT_N_REPEATS,
+            n_top_features=top_n_features,
+            random_state=config.RANDOM_STATE
+        )
+
+        print(f"\nTop {len(top_features)} features selected:")
+        for i, feature in enumerate(top_features, 1):
+            importance = test_imp[test_imp['feature'] == feature]['importance_mean'].iloc[0]
+            print(f"  {i:2d}. {feature}: {importance:.4f}")
+
+        # Save audit results
+        train_imp.to_csv(os.path.join(audit_dir, 'train_importance.csv'), index=False)
+        test_imp.to_csv(os.path.join(audit_dir, 'test_importance.csv'), index=False)
+
+        with open(os.path.join(audit_dir, 'top_features.txt'), 'w') as f:
+            for feature in top_features:
+                f.write(f"{feature}\n")
     
     # Create feature importance plot
     plt.figure(figsize=(12, 8))
@@ -274,10 +326,11 @@ def run_feature_audit(data_path, output_dir, model_type='random_forest',
     
     return X_train_pruned, X_test_pruned, y_train, y_test, audit_results
 
-def run_strategy_comparison(data_path, output_dir='results_comparison', 
+def run_strategy_comparison(data_path, output_dir='results_comparison',
                            train_end_date=None, symbol='SPY', use_optimized_params=False,
-                           run_feature_audit_flag=False, audit_model='random_forest', 
-                           top_n_features=None, include_momentum=False, timeframe='daily'):
+                           run_feature_audit_flag=False, audit_model='random_forest',
+                           top_n_features=None, include_momentum=False, timeframe='daily',
+                           train_data=None, test_data=None, asset_type=None):
     """
     Run comparison of different strategies/models.
     
@@ -315,7 +368,9 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
     if run_feature_audit_flag:
         print("=== Feature Audit Phase ===")
         top_features, audit_results = run_feature_audit(
-            data_path, output_dir, audit_model, top_n_features, audit_only=True, symbol=symbol, timeframe=timeframe
+            data_path, output_dir, audit_model, top_n_features, audit_only=True,
+            symbol=symbol, timeframe=timeframe, train_data=train_data,
+            test_data=test_data, asset_type=asset_type
         )
         print(f"Feature audit completed. Selected {len(top_features)} features.")
         
@@ -325,7 +380,14 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
                 f.write(f"{feature}\n")
     
     # Load data
-    df = load_data(data_path, symbol=symbol, timeframe=timeframe)
+    df = load_data(
+        data_path,
+        symbol=symbol,
+        timeframe=timeframe,
+        train_data=train_data,
+        test_data=test_data,
+        asset_type=asset_type,
+    )
     
     # Define training and testing periods
     if train_end_date is not None:
@@ -343,7 +405,7 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
     
     # Get strategy configurations
     strategy_configs = get_strategy_configs(use_optimized_params, include_momentum=include_momentum, timeframe=timeframe)
-    
+
     # Set symbol for all configs and feature audit settings
     for config in strategy_configs:
         config['symbol'] = symbol
@@ -354,7 +416,7 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
             config['use_feature_pruning'] = True
             config['audit_model'] = audit_model
             config['top_n_features'] = top_n_features or config.TOP_N_FEATURES
-    
+
     # Run strategies
     results = {}
     equity_curves = []
@@ -382,12 +444,12 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
             strategy_type = 'quod'
         else:
             strategy_type = 'trend_following'
-            
+
         # Use StrategyRegistry to get strategy instance
         strategy = StrategyRegistry.get_strategy(strategy_type, config)
 
         # Run backtest
-        backtest_results = strategy.backtest(df, train_data, test_data, timeframe)
+        backtest_results = strategy.backtest(df, train_df, test_df, timeframe)
 
         # Store results
         results[config['name']] = backtest_results
@@ -600,7 +662,8 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
                        calibrate=False, use_optimized_params=False,
                        run_feature_audit_flag=False, audit_model='random_forest',
                        top_n_features=None, timeframe='daily',
-                       performance_window=None, switch_cooldown=None):
+                       performance_window=None, switch_cooldown=None,
+                       train_data=None, test_data=None, asset_type=None):
     """
     Run a single strategy with specified parameters.
     
@@ -646,27 +709,36 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     if run_feature_audit_flag:
         print("=== Feature Audit Phase ===")
         top_features, audit_results = run_feature_audit(
-            data_path, output_dir, audit_model, top_n_features, audit_only=True, symbol=symbol, timeframe=timeframe
+            data_path, output_dir, audit_model, top_n_features, audit_only=True,
+            symbol=symbol, timeframe=timeframe, train_data=train_data,
+            test_data=test_data, asset_type=asset_type
         )
         print(f"Feature audit completed. Selected {len(top_features)} features.")
     
     # Load data
-    df = load_data(data_path, symbol=symbol, timeframe=timeframe)
+    df = load_data(
+        data_path,
+        symbol=symbol,
+        timeframe=timeframe,
+        train_data=train_data,
+        test_data=test_data,
+        asset_type=asset_type,
+    )
     
     # Define training and testing periods
     if train_end_date is not None:
         train_end_date = pd.to_datetime(train_end_date)
-        train_data = df[df.index <= train_end_date]
-        test_data = df[df.index > train_end_date]
+        train_df = df[df.index <= train_end_date]
+        test_df = df[df.index > train_end_date]
     else:
         # Use 70% of data for training
         train_size = int(len(df) * 0.7)
-        train_data = df.iloc[:train_size]
-        test_data = df.iloc[train_size:]
-    
+        train_df = df.iloc[:train_size]
+        test_df = df.iloc[train_size:]
+
     # Print training and testing data info
-    print(f"Training data: {len(train_data)} rows ({train_data.index[0]} to {train_data.index[-1]})")
-    print(f"Testing data: {len(test_data)} rows ({test_data.index[0]} to {test_data.index[-1]})")
+    print(f"Training data: {len(train_df)} rows ({train_df.index[0]} to {train_df.index[-1]})")
+    print(f"Testing data: {len(test_df)} rows ({test_df.index[0]} to {test_df.index[-1]})")
     
     # Check if model_type is a momentum strategy or meta-strategy
     momentum_strategies = ['bb_rsi_adx', 'tema', 'quod', 'jfk_dsrsi', 'mpo_3tf', 'meta_strategy']
@@ -792,7 +864,7 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     strategy = StrategyRegistry.get_strategy(strategy_type, config)
     
     # Run backtest
-    results = strategy.backtest(df, train_data, test_data, timeframe)
+    results = strategy.backtest(df, train_df, test_df, timeframe)
     
     # Save model/strategy
     # For momentum strategies, this saves configuration only
@@ -915,6 +987,14 @@ def parse_arguments():
     
     parser.add_argument('--symbol', type=str, default='SPY',
                         help='Trading symbol (default: SPY)')
+
+    parser.add_argument('--asset-type', type=str, choices=['STOCK', 'INDEX'], default=None,
+                        help='Asset type prefix in data files (e.g., STOCK or INDEX)')
+
+    parser.add_argument('--train-data', type=str, default=None,
+                        help='Explicit path to training data file')
+    parser.add_argument('--test-data', type=str, default=None,
+                        help='Explicit path to testing data file')
     
     parser.add_argument('--calibrate', action='store_true',
                         help='Use probability calibration for Decision Tree and Random Forest models')
@@ -930,8 +1010,8 @@ def parse_arguments():
     parser.add_argument('--feature-audit', action='store_true',
                         help='Perform feature importance audit before running strategies')
     
-    parser.add_argument('--audit-model', type=str, 
-                        choices=['decision_tree', 'random_forest', 'xgboost'], 
+    parser.add_argument('--audit-model', type=str,
+                        choices=['decision_tree', 'random_forest', 'xgboost', 'bb_rsi_adx', 'tema', 'quod', 'jfk_dsrsi', 'mpo_3tf'],
                         default='random_forest',
                         help='Model type for feature importance evaluation (default: random_forest)')
     
@@ -967,7 +1047,10 @@ def main():
             top_n_features=args.top_features,
             audit_only=True,
             symbol=args.symbol,
-            timeframe=args.timeframe
+            timeframe=args.timeframe,
+            train_data=args.train_data,
+            test_data=args.test_data,
+            asset_type=args.asset_type,
         )
     elif args.mode == 'single':
         run_single_strategy(
@@ -984,7 +1067,10 @@ def main():
             top_n_features=args.top_features,
             timeframe=args.timeframe,
             performance_window=args.performance_window,
-            switch_cooldown=args.switch_cooldown
+            switch_cooldown=args.switch_cooldown,
+            train_data=args.train_data,
+            test_data=args.test_data,
+            asset_type=args.asset_type,
         )
     else:  # compare mode
         run_strategy_comparison(
@@ -997,7 +1083,10 @@ def main():
             audit_model=args.audit_model,
             top_n_features=args.top_features,
             include_momentum=args.include_momentum,
-            timeframe=args.timeframe
+            timeframe=args.timeframe,
+            train_data=args.train_data,
+            test_data=args.test_data,
+            asset_type=args.asset_type,
         )
 
 if __name__ == "__main__":

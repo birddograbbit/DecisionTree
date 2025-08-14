@@ -169,9 +169,6 @@ def run_feature_audit(data_path, output_dir, model_type='random_forest',
         data_path,
         symbol=symbol,
         timeframe=timeframe,
-        train_data=train_data,
-        test_data=test_data,
-        asset_type=asset_type,
     )
     
     # Use config default if not specified
@@ -369,8 +366,7 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         print("=== Feature Audit Phase ===")
         top_features, audit_results = run_feature_audit(
             data_path, output_dir, audit_model, top_n_features, audit_only=True,
-            symbol=symbol, timeframe=timeframe, train_data=train_data,
-            test_data=test_data, asset_type=asset_type
+            symbol=symbol, timeframe=timeframe
         )
         print(f"Feature audit completed. Selected {len(top_features)} features.")
         
@@ -449,7 +445,7 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         strategy = StrategyRegistry.get_strategy(strategy_type, config)
 
         # Run backtest
-        backtest_results = strategy.backtest(df, train_df, test_df, timeframe)
+        backtest_results = strategy.backtest(df, train_data, test_data, timeframe)
 
         # Store results
         results[config['name']] = backtest_results
@@ -481,7 +477,7 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         plt.figure(figsize=(12, 8))
 
         # Add buy and hold equity curve for reference
-        buy_hold = (test_df['close'] / test_df['close'].iloc[0])
+        buy_hold = (test_data['close'] / test_data['close'].iloc[0])
         plt.plot(buy_hold.index, buy_hold, label='Buy & Hold', linestyle='--')
 
         # Plot strategy equity curves
@@ -710,8 +706,7 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         print("=== Feature Audit Phase ===")
         top_features, audit_results = run_feature_audit(
             data_path, output_dir, audit_model, top_n_features, audit_only=True,
-            symbol=symbol, timeframe=timeframe, train_data=train_data,
-            test_data=test_data, asset_type=asset_type
+            symbol=symbol, timeframe=timeframe
         )
         print(f"Feature audit completed. Selected {len(top_features)} features.")
     
@@ -1048,9 +1043,6 @@ def main():
             audit_only=True,
             symbol=args.symbol,
             timeframe=args.timeframe,
-            train_data=args.train_data,
-            test_data=args.test_data,
-            asset_type=args.asset_type,
         )
     elif args.mode == 'single':
         run_single_strategy(

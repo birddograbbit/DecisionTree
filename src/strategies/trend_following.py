@@ -4,7 +4,7 @@ Trend following strategy using ensemble models.
 
 import pandas as pd
 import numpy as np
-from .base_strategy import BaseStrategy, BUY_THRESHOLD, SELL_THRESHOLD
+from .base_strategy import BaseStrategy
 from src.engines.model_engine import ModelEngine
 from src.engines.signal_engine import SignalEngine
 from src.features.feature_engineering import engineer_features

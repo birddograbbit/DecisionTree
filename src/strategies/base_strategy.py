@@ -5,23 +5,8 @@ Base strategy interface for trading strategies.
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
-import warnings
 from typing import List, Dict, Tuple, Optional, Union
 from src.utils.threshold_manager import ThresholdManager
-
-# Backward compatibility constants (DEPRECATED)
-# These constants are deprecated as of v0.2 - use ThresholdManager instead
-BUY_THRESHOLD = 0.65
-SELL_THRESHOLD = 0.35
-
-# Issue deprecation warning when these constants are imported
-warnings.warn(
-    "BUY_THRESHOLD and SELL_THRESHOLD constants are deprecated. "
-    "Use ThresholdManager.get_thresholds() instead for adaptive threshold support. "
-    "Legacy constants will be removed in a future version.",
-    DeprecationWarning,
-    stacklevel=2
-)
 
 class BaseStrategy(ABC):
     """

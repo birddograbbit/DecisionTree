@@ -24,6 +24,10 @@ INITIAL_CAPITAL = 100000  # Initial capital for backtesting
 COMMISSION_RATE = 0.0005  # Commission rate per trade (0.05%)
 SLIPPAGE_RATE = 0.0001  # Slippage rate per trade (0.01%)
 
+# Signal threshold settings
+BUY_THRESHOLD = 0.55
+SELL_THRESHOLD = 0.45
+
 # Risk management settings
 MAX_POSITION_SIZE = 0.05  # Maximum position size as fraction of total capital
 MAX_PORTFOLIO_ALLOCATION = 0.5  # Maximum portfolio allocation

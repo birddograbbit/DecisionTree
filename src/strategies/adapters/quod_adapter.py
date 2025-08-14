@@ -17,6 +17,7 @@ from src.strategies.base_strategy import BaseStrategy
 from src.strategies.order_management import OrderManagementSystem, OrderType
 from src.features.indicators import calculate_stochastic, calculate_atr
 from src.features.multi_timeframe_features import MultiTimeframeAggregator
+import config
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -533,6 +534,11 @@ class QuodAdapter(BaseStrategy):
         # Calculate returns
         position = signals['signal'].shift(1).fillna(0)
         returns = position * aligned_prices['close'].pct_change()
+
+        commission = self.config.get('commission', config.COMMISSION_RATE)
+        slippage = self.config.get('slippage', config.SLIPPAGE_RATE)
+        trade_changes = signals['signal'].diff().abs().fillna(0)
+        returns -= trade_changes * (commission + slippage)
         
         # Determine annualization factor based on timeframe
         timeframe = self.config.get('primary_timeframe', '5T')

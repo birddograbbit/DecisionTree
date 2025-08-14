@@ -4,7 +4,7 @@ Module for generating trading signals from model predictions.
 """
 
 import pandas as pd
-from src.strategies.base_strategy import BUY_THRESHOLD, SELL_THRESHOLD
+from src.utils.threshold_manager import ThresholdManager
 
 
 def generate_signals(model, X, dates, symbol="SPY"):
@@ -34,10 +34,13 @@ def generate_signals(model, X, dates, symbol="SPY"):
     if not isinstance(dates, pd.Series):
         dates = pd.Series(dates)
 
-    # Create signals DataFrame using global thresholds
+    # Create signals DataFrame using threshold manager
+    tm = ThresholdManager()
+    buy_threshold, sell_threshold = tm.get_thresholds()
+
     signals = []
     for i in range(len(X)):
-        if proba[i] > BUY_THRESHOLD:  # Buy signal
+        if proba[i] > buy_threshold:  # Buy signal
             signals.append(
                 {
                     "date": dates.iloc[i],
@@ -46,7 +49,7 @@ def generate_signals(model, X, dates, symbol="SPY"):
                     "probability": proba[i],
                 }
             )
-        elif proba[i] < SELL_THRESHOLD:  # Sell signal
+        elif proba[i] < sell_threshold:  # Sell signal
             signals.append(
                 {
                     "date": dates.iloc[i],

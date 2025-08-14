@@ -316,6 +316,13 @@ JFK_DSRSI_1MIN_CONFIG = {
     'timeframe': '1min',
 }
 
+JFK_DSRSI_SPX_CONFIG = {
+    **JFK_DSRSI_CONFIG,
+    'name': 'JFK-DSRSI SPX',
+    'symbol': 'SPX',
+    'asset_type': 'INDEX'
+}
+
 # MPO-3TF Strategy
 MPO_3TF_CONFIG = {
     'name': 'MPO-3TF',
@@ -335,6 +342,13 @@ MPO_3TF_5MIN_CONFIG = {
     **MPO_3TF_CONFIG,
     'name': 'MPO-3TF (5min)',
     'timeframe': '5min',
+}
+
+MPO_3TF_SPX_CONFIG = {
+    **MPO_3TF_CONFIG,
+    'name': 'MPO-3TF SPX',
+    'symbol': 'SPX',
+    'asset_type': 'INDEX'
 }
 
 # 5-Minute Strategy Configurations
@@ -395,6 +409,28 @@ HYBRID_XGB_TEMA_5MIN_CONFIG = {
     'timeframe': '5min'
 }
 
+HYBRID_XGB_JFK_5MIN_CONFIG = {
+    'name': 'Hybrid XGBoost+JFK-DSRSI (5min)',
+    'model_type': 'hybrid_momentum',
+    'ml_model_type': 'xgboost',
+    'ml_model_params': XGBOOST_5MIN_CONFIG['model_params'],
+    'momentum_strategy': 'jfk_dsrsi',
+    'agree_only': True,
+    'weights': (0.3, 0.7),
+    'timeframe': '5min'
+}
+
+HYBRID_XGB_MPO_5MIN_CONFIG = {
+    'name': 'Hybrid XGBoost+MPO-3TF (5min)',
+    'model_type': 'hybrid_momentum',
+    'ml_model_type': 'xgboost',
+    'ml_model_params': XGBOOST_5MIN_CONFIG['model_params'],
+    'momentum_strategy': 'mpo_3tf',
+    'agree_only': True,
+    'weights': (0.3, 0.7),
+    'timeframe': '5min'
+}
+
 # All strategy configurations
 STRATEGY_CONFIGS = {
     'decision_tree': DECISION_TREE_CONFIG,
@@ -432,12 +468,16 @@ STRATEGY_CONFIGS = {
     'quod': QUOD_CONFIG,
     'jfk_dsrsi': JFK_DSRSI_CONFIG,
     'jfk_dsrsi_1min': JFK_DSRSI_1MIN_CONFIG,
+    'jfk_dsrsi_spx': JFK_DSRSI_SPX_CONFIG,
     'mpo_3tf': MPO_3TF_CONFIG,
     'mpo_3tf_5min': MPO_3TF_5MIN_CONFIG,
+    'mpo_3tf_spx': MPO_3TF_SPX_CONFIG,
     # 5-minute momentum strategies
     'bb_rsi_adx_5min': BB_RSI_ADX_5MIN_CONFIG,
     'tema_5min': TEMA_5MIN_CONFIG,
     'hybrid_xgb_tema_5min': HYBRID_XGB_TEMA_5MIN_CONFIG,
+    'hybrid_xgb_jfk_5min': HYBRID_XGB_JFK_5MIN_CONFIG,
+    'hybrid_xgb_mpo_5min': HYBRID_XGB_MPO_5MIN_CONFIG,
     'multi_tf_tema': {
         'name': 'Multi-Timeframe TEMA',
         'model_type': 'multi_timeframe',

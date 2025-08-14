@@ -56,7 +56,7 @@ class MetaStrategy(BaseStrategy):
         
         # Load configured strategies
         self.available_strategies = {}
-        strategy_names = self.config.get('strategies', ['quod', 'tema', 'bb_rsi_adx'])
+        strategy_names = self.config.get('strategies', ['quod', 'tema', 'bb_rsi_adx', 'jfk_dsrsi', 'mpo_3tf'])
         
         for name in strategy_names:
             try:
@@ -90,11 +90,11 @@ class MetaStrategy(BaseStrategy):
         return {
             'strong_uptrend': 'tema',      # Trend following
             'uptrend': 'tema',
-            'weak_uptrend': 'bb_rsi_adx',  # Momentum
-            'volatile_neutral': 'bb_rsi_adx',
+            'weak_uptrend': 'jfk_dsrsi',  # Additional momentum strategy
+            'volatile_neutral': 'mpo_3tf',
             'neutral': 'quod',             # Mean reversion
             'low_vol_neutral': 'quod',
-            'weak_downtrend': 'bb_rsi_adx',
+            'weak_downtrend': 'mpo_3tf',
             'downtrend': 'tema',
             'strong_downtrend': 'tema'
         }

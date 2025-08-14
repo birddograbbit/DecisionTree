@@ -5,8 +5,17 @@ Module for preprocessing raw data.
 
 import pandas as pd
 import numpy as np
+from typing import Union, List
 
 # src/data/preprocessing.py (Add this function)
+
+def _load_csv_files(files: Union[str, List[str]]) -> pd.DataFrame:
+    """Helper to load one or multiple CSV files and concatenate."""
+    if isinstance(files, list):
+        dfs = [pd.read_csv(f) for f in files]
+        return pd.concat(dfs)
+    return pd.read_csv(files)
+
 
 def load_ibkr_data(train_file, test_file):
     """
@@ -26,16 +35,17 @@ def load_ibkr_data(train_file, test_file):
     """
     # Load training and testing data
     print(f"Loading training data from {train_file}...")
-    train_data = pd.read_csv(train_file)
-    
+    train_data = _load_csv_files(train_file)
+
     print(f"Loading testing data from {test_file}...")
-    test_data = pd.read_csv(test_file)
+    test_data = _load_csv_files(test_file)
     
     # Combine the data
     combined_data = pd.concat([train_data, test_data])
     
     # Convert date column to datetime and set as index
-    combined_data['date'] = pd.to_datetime(combined_data['date'])
+    combined_data['date'] = pd.to_datetime(combined_data['date'], utc=True)
+    combined_data['date'] = combined_data['date'].dt.tz_convert('UTC').dt.tz_localize(None)
     combined_data.set_index('date', inplace=True)
     
     # Sort by date (no need to reverse since IBKR data is already in chronological order)
@@ -72,18 +82,17 @@ def load_5min_data(train_file, test_file):
     """
     # Load training and testing data
     print(f"Loading 5-minute training data from {train_file}...")
-    train_data = pd.read_csv(train_file)
-    
+    train_data = _load_csv_files(train_file)
+
     print(f"Loading 5-minute testing data from {test_file}...")
-    test_data = pd.read_csv(test_file)
+    test_data = _load_csv_files(test_file)
     
     # Combine the data
     combined_data = pd.concat([train_data, test_data])
     
     # Convert date column to datetime and handle timezone
-    combined_data['date'] = pd.to_datetime(combined_data['date'])
-    # Remove timezone info for consistency with existing code
-    combined_data['date'] = combined_data['date'].dt.tz_localize(None)
+    combined_data['date'] = pd.to_datetime(combined_data['date'], utc=True)
+    combined_data['date'] = combined_data['date'].dt.tz_convert('UTC').dt.tz_localize(None)
     combined_data.set_index('date', inplace=True)
     
     # Sort by date
@@ -122,16 +131,16 @@ def load_1min_data(train_file, test_file):
         Combined and preprocessed 1-minute data
     """
     print(f"Loading 1-minute training data from {train_file}...")
-    train_data = pd.read_csv(train_file)
+    train_data = _load_csv_files(train_file)
 
     print(f"Loading 1-minute testing data from {test_file}...")
-    test_data = pd.read_csv(test_file)
+    test_data = _load_csv_files(test_file)
 
     combined_data = pd.concat([train_data, test_data])
 
     # Parse timestamps and convert to timezone-naive UTC
     combined_data['date'] = pd.to_datetime(combined_data['date'], utc=True)
-    combined_data['date'] = combined_data['date'].dt.tz_convert(None)
+    combined_data['date'] = combined_data['date'].dt.tz_convert('UTC').dt.tz_localize(None)
     combined_data.set_index('date', inplace=True)
 
     combined_data = combined_data.sort_index()

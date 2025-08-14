@@ -78,6 +78,17 @@ Ensure 5‑minute historical CSV files are available under `data/raw/` with name
 python strategy_runner.py --data data/raw --model random_forest --timeframe 5min --output rf_5min
 ```
 
+### SPX Data & New Momentum Strategies
+
+The JFK-DSRSI and MPO-3TF momentum strategies support both SPY and SPX symbols. Use the new CLI options to specify asset type and custom data files:
+
+```bash
+python strategy_runner.py --data data/raw --model jfk_dsrsi --timeframe 5min \
+    --symbol SPX --asset-type INDEX
+```
+
+By default, the system searches `data/raw` for intraday files. You can override file discovery with `--train-data` and `--test-data`. All timestamps are normalized to timezone-naive UTC to ensure consistent comparisons.
+
 ### Level 1: Basic Functionality Tests
 
 #### 1.1 Smoke Tests - Basic Strategy Execution

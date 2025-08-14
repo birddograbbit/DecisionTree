@@ -31,11 +31,13 @@ venv.bak/
 # OS specific files
 .DS_Store
 
-# Project specific
-data/raw/
-# Allow specific testing data files
-!data/raw/historical_data_STOCK_SPY_1_day2000-2009.csv
-!data/raw/historical_data_STOCK_SPY_1_day2010-2025.csv
+# # Project specific
+# data/raw/
+# # Allow specific testing data files
+# !data/raw/historical_data_STOCK_SPY_1_day2000-2009.csv
+# !data/raw/historical_data_STOCK_SPY_1_day2010-2025.csv
+# historical_data_INDEX_SPX_1_min_202407-202507.csv
+
 data/processed/
 data/models/*.pkl
 results/
@@ -78,3 +80,7 @@ xgb_test/
 xgboost_focal_test/
 test_focal_loss.py
 meta_test/
+
+results*/
+rf_5min/
+.coverage.JTs-MacBook-Pro.local.68122.Xogmdsvx

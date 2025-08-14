@@ -58,8 +58,8 @@ def load_data(data_path, symbol='SPY', timeframe='daily'):
             test_file = os.path.join(data_path, f'historical_data_STOCK_{symbol}_5_mins_2025.csv')
             loader = load_5min_data
         else:
-            train_file = os.path.join(data_path, f'historical_data_INDEX_{symbol}_1_min_2023-2024.csv')
-            test_file = os.path.join(data_path, f'historical_data_INDEX_{symbol}_1_min_2025.csv')
+            train_file = os.path.join(data_path, f'historical_data_INDEX_{symbol}1_min_2022Aug-2024Aug.csv')
+            test_file = os.path.join(data_path, f'historical_data_INDEX_{symbol}_1_min_2024Aug-2025Aug.csv')
             loader = load_1min_data
 
         if not os.path.exists(train_file) or not os.path.exists(test_file):

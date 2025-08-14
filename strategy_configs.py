@@ -292,6 +292,51 @@ QUOD_CONFIG = {
     'allow_same_bar_exit': True
 }
 
+# JFK-DSRSI Strategy
+JFK_DSRSI_CONFIG = {
+    'name': 'JFK-DSRSI',
+    'model_type': 'jfk_dsrsi',
+    'symbol': 'SPY',
+    'position_size': 0.1,
+    'timeframe': '5min',
+    'dsrsi_length': 14,
+    'smoothing_period': 3,
+    'kps_length': 14,
+    'kps_smooth': 3,
+    'rsi_long_threshold': 60,
+    'rsi_short_threshold': 40,
+    'atr_length': 14,
+    'atr_stop_loss': 3,
+    'atr_take_profit': 3,
+}
+
+JFK_DSRSI_1MIN_CONFIG = {
+    **JFK_DSRSI_CONFIG,
+    'name': 'JFK-DSRSI (1min)',
+    'timeframe': '1min',
+}
+
+# MPO-3TF Strategy
+MPO_3TF_CONFIG = {
+    'name': 'MPO-3TF',
+    'model_type': 'mpo_3tf',
+    'symbol': 'SPY',
+    'position_size': 0.1,
+    'timeframe': '1min',
+    'rsi_period': 14,
+    'rsi_upper': 60,
+    'rsi_lower': 40,
+    'atr_length': 14,
+    'atr_stop_loss': 3,
+    'atr_take_profit': 3,
+}
+
+MPO_3TF_5MIN_CONFIG = {
+    **MPO_3TF_CONFIG,
+    'name': 'MPO-3TF (5min)',
+    'timeframe': '5min',
+}
+
 # 5-Minute Strategy Configurations
 
 # BB-RSI-ADX 5-Minute Configuration
@@ -385,6 +430,10 @@ STRATEGY_CONFIGS = {
     'bb_rsi_adx': BB_RSI_ADX_CONFIG,
     'tema': TEMA_CONFIG,
     'quod': QUOD_CONFIG,
+    'jfk_dsrsi': JFK_DSRSI_CONFIG,
+    'jfk_dsrsi_1min': JFK_DSRSI_1MIN_CONFIG,
+    'mpo_3tf': MPO_3TF_CONFIG,
+    'mpo_3tf_5min': MPO_3TF_5MIN_CONFIG,
     # 5-minute momentum strategies
     'bb_rsi_adx_5min': BB_RSI_ADX_5MIN_CONFIG,
     'tema_5min': TEMA_5MIN_CONFIG,

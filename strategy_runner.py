@@ -481,7 +481,7 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         plt.figure(figsize=(12, 8))
 
         # Add buy and hold equity curve for reference
-        buy_hold = (test_data['close'] / test_data['close'].iloc[0])
+        buy_hold = (test_df['close'] / test_df['close'].iloc[0])
         plt.plot(buy_hold.index, buy_hold, label='Buy & Hold', linestyle='--')
 
         # Plot strategy equity curves
@@ -889,7 +889,7 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         plt.plot(equity.index, equity / equity.iloc[0], label=config['name'])
         
         # Buy and hold reference
-        buy_hold = (test_data['close'] / test_data['close'].iloc[0])
+        buy_hold = (test_df['close'] / test_df['close'].iloc[0])
         plt.plot(buy_hold.index, buy_hold, label='Buy & Hold', linestyle='--')
         
         plt.title(f'{config["name"]} Strategy vs Buy & Hold')

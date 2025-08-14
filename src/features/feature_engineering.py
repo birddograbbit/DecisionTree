@@ -210,6 +210,9 @@ def engineer_features(df, lookback_period=10, timeframe: str = 'daily'):
             'volatility_5', 'lag_return_1', 'lag_return_3'
         ])
 
+    df_features.replace([np.inf, -np.inf], np.nan, inplace=True)
+    df_features.dropna(inplace=True)
+
     # Extract features
     X = df_features[features]
     

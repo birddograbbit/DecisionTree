@@ -83,7 +83,16 @@ python strategy_runner.py --data data/raw --model random_forest --timeframe 5min
 The JFK-DSRSI and MPO-3TF momentum strategies support both SPY and SPX symbols. Use the new CLI options to specify asset type and custom data files:
 
 ```bash
+# JFK-DSRSI example (SPX index)
 python strategy_runner.py --data data/raw --model jfk_dsrsi --timeframe 5min \
+    --symbol SPX --asset-type INDEX
+
+# MPO-3TF example (SPY stock)
+python strategy_runner.py --data data/raw --model mpo_3tf --timeframe 5min \
+    --symbol SPY --asset-type STOCK
+
+# Both strategies also support 1-minute data
+python strategy_runner.py --data data/raw --model jfk_dsrsi --timeframe 1min \
     --symbol SPX --asset-type INDEX
 ```
 
@@ -106,6 +115,12 @@ python strategy_runner.py --data data/raw --model xgboost --mode single --output
 
 # Test Stacking Ensemble
 python strategy_runner.py --data data/raw --model stacking --mode single --output test_stacking
+
+# Test JFK-DSRSI momentum (SPX example)
+python strategy_runner.py --data data/raw --model jfk_dsrsi --timeframe 5min --symbol SPX --asset-type INDEX --output test_jfk
+
+# Test MPO-3TF momentum (SPY example)
+python strategy_runner.py --data data/raw --model mpo_3tf --timeframe 5min --symbol SPY --output test_mpo
 ```
 
 **Expected Results:**

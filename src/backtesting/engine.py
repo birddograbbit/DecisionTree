@@ -109,6 +109,8 @@ class BacktestEngine:
                     continue
                     
                 price = price_data.loc[date, 'close']
+                if isinstance(price, pd.Series):
+                    price = price.iloc[0]
                 
                 # Process signal
                 if signal == 1 and symbol not in self.positions:  # Buy

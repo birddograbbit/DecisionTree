@@ -7,14 +7,12 @@ import numpy as np
 from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split
 from src.models.model_factory import ModelFactory
-from src.strategies.base_strategy import BUY_THRESHOLD, SELL_THRESHOLD
 
 def main():
     print('Creating test data...')
     X, y = make_classification(n_samples=1000, n_features=20, random_state=42)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    print(f'\nGlobal thresholds: buy={BUY_THRESHOLD}, sell={SELL_THRESHOLD}')
 
     print('\nTesting DecisionTree with calibration...')
     dt = ModelFactory.create_model('decision_tree', calibrate=True)

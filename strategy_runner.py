@@ -132,8 +132,9 @@ def load_data(data_path, symbol='SPY', timeframe='daily', train_data=None, test_
     
     return df
 
-def run_feature_audit(data_path, output_dir, model_type='random_forest', 
-                     top_n_features=None, audit_only=False, symbol='SPY', timeframe='daily'):
+def run_feature_audit(data_path, output_dir, model_type='random_forest',
+                     top_n_features=None, audit_only=False, symbol='SPY', timeframe='daily',
+                     train_data=None, test_data=None, asset_type=None):
     """
     Run feature importance audit on the data.
     
@@ -369,8 +370,8 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         print("=== Feature Audit Phase ===")
         top_features, audit_results = run_feature_audit(
             data_path, output_dir, audit_model, top_n_features, audit_only=True,
-            symbol=symbol, timeframe=timeframe, train_data=train_data,
-            test_data=test_data, asset_type=asset_type
+            symbol=symbol, timeframe=timeframe,
+            train_data=train_data, test_data=test_data, asset_type=asset_type
         )
         print(f"Feature audit completed. Selected {len(top_features)} features.")
         
@@ -449,7 +450,7 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         strategy = StrategyRegistry.get_strategy(strategy_type, config)
 
         # Run backtest
-        backtest_results = strategy.backtest(df, train_df, test_df, timeframe)
+        backtest_results = strategy.backtest(df, train_data, test_data, timeframe)
 
         # Store results
         results[config['name']] = backtest_results
@@ -481,7 +482,7 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         plt.figure(figsize=(12, 8))
 
         # Add buy and hold equity curve for reference
-        buy_hold = (test_df['close'] / test_df['close'].iloc[0])
+        buy_hold = (test_data['close'] / test_data['close'].iloc[0])
         plt.plot(buy_hold.index, buy_hold, label='Buy & Hold', linestyle='--')
 
         # Plot strategy equity curves
@@ -710,8 +711,8 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         print("=== Feature Audit Phase ===")
         top_features, audit_results = run_feature_audit(
             data_path, output_dir, audit_model, top_n_features, audit_only=True,
-            symbol=symbol, timeframe=timeframe, train_data=train_data,
-            test_data=test_data, asset_type=asset_type
+            symbol=symbol, timeframe=timeframe,
+            train_data=train_data, test_data=test_data, asset_type=asset_type
         )
         print(f"Feature audit completed. Selected {len(top_features)} features.")
     
@@ -728,17 +729,17 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     # Define training and testing periods
     if train_end_date is not None:
         train_end_date = pd.to_datetime(train_end_date)
-        train_df = df[df.index <= train_end_date]
-        test_df = df[df.index > train_end_date]
+        train_data = df[df.index <= train_end_date]
+        test_data = df[df.index > train_end_date]
     else:
         # Use 70% of data for training
         train_size = int(len(df) * 0.7)
-        train_df = df.iloc[:train_size]
-        test_df = df.iloc[train_size:]
+        train_data = df.iloc[:train_size]
+        test_data = df.iloc[train_size:]
 
     # Print training and testing data info
-    print(f"Training data: {len(train_df)} rows ({train_df.index[0]} to {train_df.index[-1]})")
-    print(f"Testing data: {len(test_df)} rows ({test_df.index[0]} to {test_df.index[-1]})")
+    print(f"Training data: {len(train_data)} rows ({train_data.index[0]} to {train_data.index[-1]})")
+    print(f"Testing data: {len(test_data)} rows ({test_data.index[0]} to {test_data.index[-1]})")
     
     # Check if model_type is a momentum strategy or meta-strategy
     momentum_strategies = ['bb_rsi_adx', 'tema', 'quod', 'jfk_dsrsi', 'mpo_3tf', 'meta_strategy']
@@ -864,7 +865,7 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     strategy = StrategyRegistry.get_strategy(strategy_type, config)
     
     # Run backtest
-    results = strategy.backtest(df, train_df, test_df, timeframe)
+    results = strategy.backtest(df, train_data, test_data, timeframe)
     
     # Save model/strategy
     # For momentum strategies, this saves configuration only
@@ -889,7 +890,7 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         plt.plot(equity.index, equity / equity.iloc[0], label=config['name'])
         
         # Buy and hold reference
-        buy_hold = (test_df['close'] / test_df['close'].iloc[0])
+        buy_hold = (test_data['close'] / test_data['close'].iloc[0])
         plt.plot(buy_hold.index, buy_hold, label='Buy & Hold', linestyle='--')
         
         plt.title(f'{config["name"]} Strategy vs Buy & Hold')

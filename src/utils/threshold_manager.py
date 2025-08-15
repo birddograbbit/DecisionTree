@@ -10,8 +10,8 @@ import numpy as np
 from src.utils.adaptive_thresholds import are_adaptive_thresholds_needed, calculate_adaptive_thresholds
 
 # Global threshold constants
-DEFAULT_BUY_THRESHOLD = 0.65
-DEFAULT_SELL_THRESHOLD = 0.35
+DEFAULT_BUY_THRESHOLD = 0.55
+DEFAULT_SELL_THRESHOLD = 0.45
 
 class ThresholdManager:
     """

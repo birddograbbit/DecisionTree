@@ -7,6 +7,7 @@ import pandas as pd
 from src.strategies.base_strategy import BaseStrategy
 from src.features.indicators import calculate_rsi, calculate_atr
 from src.features.multi_timeframe_features import MultiTimeframeAggregator
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +120,11 @@ class MPO3TFAdapter(BaseStrategy):
         aligned_prices = prices.loc[signals.index]
         position = signals['signal'].shift(1).fillna(0)
         returns = position * aligned_prices['close'].pct_change()
+
+        commission = self.config.get('commission', config.COMMISSION_RATE)
+        slippage = self.config.get('slippage', config.SLIPPAGE_RATE)
+        trade_changes = signals['signal'].diff().abs().fillna(0)
+        returns -= trade_changes * (commission + slippage)
 
         timeframe = self.config.get('timeframe', '1min') if hasattr(self, 'config') and self.config else '1min'
         if timeframe in ['1min', '1T', '1m']:

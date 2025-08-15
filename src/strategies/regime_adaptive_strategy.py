@@ -47,11 +47,9 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
         super().initialize(config)
         
         # ---- Default probability thresholds ----
-        # Use global constants to maintain a single source of truth
-        from .base_strategy import BUY_THRESHOLD, SELL_THRESHOLD
-        self.buy_threshold = BUY_THRESHOLD
-        self.sell_threshold = SELL_THRESHOLD
-        
+        # Retrieve initial thresholds from ThresholdManager
+        self.buy_threshold, self.sell_threshold = self.get_thresholds()
+
         # For backward compatibility with helper methods that still
         # expect a single attribute
         self.threshold = (self.buy_threshold, self.sell_threshold)

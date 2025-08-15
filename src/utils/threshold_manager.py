@@ -7,11 +7,14 @@ of truth for threshold determination.
 """
 
 import numpy as np
+import config
 from src.utils.adaptive_thresholds import are_adaptive_thresholds_needed, calculate_adaptive_thresholds
 
 # Global threshold constants
 DEFAULT_BUY_THRESHOLD = 0.55
 DEFAULT_SELL_THRESHOLD = 0.45
+DEFAULT_BUY_PERCENTILE = getattr(config, 'BUY_PERCENTILE', 70)
+DEFAULT_SELL_PERCENTILE = getattr(config, 'SELL_PERCENTILE', 30)
 
 class ThresholdManager:
     """
@@ -116,8 +119,8 @@ class ThresholdManager:
         tuple
             (adaptive_buy_threshold, adaptive_sell_threshold)
         """
-        buy_percentile = self.config.get('buy_percentile', 80)
-        sell_percentile = self.config.get('sell_percentile', 20)
+        buy_percentile = self.config.get('buy_percentile', DEFAULT_BUY_PERCENTILE)
+        sell_percentile = self.config.get('sell_percentile', DEFAULT_SELL_PERCENTILE)
         
         adaptive_buy, adaptive_sell = calculate_adaptive_thresholds(
             predictions, 

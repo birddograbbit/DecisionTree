@@ -11,6 +11,7 @@ import pandas as pd
 import numpy as np
 import logging
 from typing import Dict, List, Optional
+import config
 from .base_strategy import BaseStrategy
 from .strategy_registry import StrategyRegistry
 from ..features.regime_detection import RegimeDetector
@@ -362,10 +363,18 @@ class MetaStrategy(BaseStrategy):
             
             # Run simplified backtest to get performance
             from src.backtesting.engine import BacktestEngine
+            commission = self.config.get(
+                'commission',
+                config.TRANSACTION_COST_5MIN if timeframe in ('5min', '5T') else config.TRANSACTION_COST,
+            )
+            slippage = self.config.get(
+                'slippage',
+                config.SLIPPAGE_5MIN if timeframe in ('5min', '5T') else config.SLIPPAGE_RATE,
+            )
             backtest_engine = BacktestEngine(
-                initial_capital=100000,
-                commission=0.001,
-                slippage=0.001
+                initial_capital=self.config.get('initial_capital', config.INITIAL_CAPITAL),
+                commission=commission,
+                slippage=slippage,
             )
             
             # Make sure data doesn't have date as both index and column
@@ -494,11 +503,19 @@ class MetaStrategy(BaseStrategy):
         
         # Now run the actual backtest on remaining data
         from src.backtesting.engine import BacktestEngine
-        
+
+        commission = self.config.get(
+            'commission',
+            config.TRANSACTION_COST_5MIN if timeframe in ('5min', '5T') else config.TRANSACTION_COST,
+        )
+        slippage = self.config.get(
+            'slippage',
+            config.SLIPPAGE_5MIN if timeframe in ('5min', '5T') else config.SLIPPAGE_RATE,
+        )
         backtest_engine = BacktestEngine(
-            initial_capital=self.config.get('initial_capital', 100000),
-            commission=self.config.get('commission', 0.001),
-            slippage=self.config.get('slippage', 0.001)
+            initial_capital=self.config.get('initial_capital', config.INITIAL_CAPITAL),
+            commission=commission,
+            slippage=slippage,
         )
         
         # Generate signals for the remaining test data

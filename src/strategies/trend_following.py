@@ -271,10 +271,18 @@ class TrendFollowingStrategy(BaseStrategy):
         test_data_dict = {symbol: test_data}
         
         # Run backtest
+        commission = self.config.get(
+            'commission',
+            config.TRANSACTION_COST_5MIN if timeframe in ('5min', '5T') else config.TRANSACTION_COST,
+        )
+        slippage = self.config.get(
+            'slippage',
+            config.SLIPPAGE_5MIN if timeframe in ('5min', '5T') else config.SLIPPAGE_RATE,
+        )
         backtest_engine = BacktestEngine(
-            initial_capital=self.config.get('initial_capital', 100000.0),
-            commission=self.config.get('commission', 0.001),
-            slippage=self.config.get('slippage', 0.001)
+            initial_capital=self.config.get('initial_capital', config.INITIAL_CAPITAL),
+            commission=commission,
+            slippage=slippage,
         )
         
         results = backtest_engine.run_backtest(signals, test_data_dict, timeframe)

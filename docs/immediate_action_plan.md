@@ -2,22 +2,16 @@
 
 ## Quick Wins (1-2 days each)
 
-### 1. Lower Signal Thresholds
+### 1. Updated Signal Thresholds
 **File**: `config.py`
 ```python
-# Change from:
-CONFIDENCE_THRESHOLDS = {
-    'BUY': 0.65,
-    'SELL': 0.35
-}
-
-# To:
-CONFIDENCE_THRESHOLDS = {
-    'BUY': 0.55,
-    'SELL': 0.45
-}
+BUY_THRESHOLD = 0.55
+SELL_THRESHOLD = 0.45
+USE_ADAPTIVE_THRESHOLDS = 'always'
+BUY_PERCENTILE = 70
+SELL_PERCENTILE = 30
 ```
-**Expected Result**: Increase trades from 5-6 to 15-20
+**Expected Result**: Increased trade frequency with dynamic thresholds
 
 ### 2. Enable Adaptive Thresholds
 **File**: `strategy_runner.py`

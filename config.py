@@ -25,8 +25,14 @@ COMMISSION_RATE = 0.0005  # Commission rate per trade (0.05%)
 SLIPPAGE_RATE = 0.0001  # Slippage rate per trade (0.01%)
 
 # Signal threshold settings
+# Default static thresholds
 BUY_THRESHOLD = 0.55
 SELL_THRESHOLD = 0.45
+
+# Adaptive threshold defaults
+USE_ADAPTIVE_THRESHOLDS = 'always'
+BUY_PERCENTILE = 70
+SELL_PERCENTILE = 30
 
 # Risk management settings
 MAX_POSITION_SIZE = 0.05  # Maximum position size as fraction of total capital

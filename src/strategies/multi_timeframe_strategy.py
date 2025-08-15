@@ -79,7 +79,17 @@ class MultiTimeframeStrategy(BaseStrategy):
 
         signals_df = pd.DataFrame({'date': base_index, 'symbol': symbol, 'signal': final_signal})
         price_df = data[['close']].copy()
-        engine = BacktestEngine(initial_capital=config.INITIAL_CAPITAL,
-                                commission=self.config.get('commission', 0.0005),
-                                slippage=self.config.get('slippage', 0.0001))
+        commission = self.config.get(
+            'commission',
+            config.TRANSACTION_COST_5MIN if timeframe in ('5min', '5T') else config.TRANSACTION_COST,
+        )
+        slippage = self.config.get(
+            'slippage',
+            config.SLIPPAGE_5MIN if timeframe in ('5min', '5T') else config.SLIPPAGE_RATE,
+        )
+        engine = BacktestEngine(
+            initial_capital=config.INITIAL_CAPITAL,
+            commission=commission,
+            slippage=slippage,
+        )
         return engine.run_backtest(signals_df, {symbol: price_df}, timeframe)

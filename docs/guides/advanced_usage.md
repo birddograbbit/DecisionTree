@@ -12,7 +12,10 @@ model = ModelFactory.create_model('transformer', d_model=128, n_heads=4, n_layer
 Use `optimize_hyperparameters.py` to run Optuna sweeps. The optimizer now
 evaluates candidate parameters by backtesting and maximizing Sharpe ratio,
 ensuring tuned models improve trading performance rather than just
-classification accuracy.
+classification accuracy. Specify the data frequency via `--timeframe`:
+```bash
+python optimize_hyperparameters.py --data data/raw --model random_forest --timeframe 5min
+```
 
 ## Multi‑GPU Training
 Set the wrapper's `device` argument to a CUDA device id and enable DistributedDataParallel if needed.

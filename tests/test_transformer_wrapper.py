@@ -40,3 +40,11 @@ def test_missing_data():
     model.train(df.drop('target',axis=1).fillna(0), df['target'])
     preds = model.predict(df.drop('target',axis=1).fillna(0))
     assert len(preds) == len(df)
+
+
+def test_single_sample_batch():
+    df = make_df(n=6)
+    model = TransformerModelWrapper(seq_length=5, epochs=1, batch_size=4)
+    model.train(df.drop('target', axis=1), df['target'])
+    preds = model.predict(df.drop('target', axis=1))
+    assert len(preds) == len(df)

@@ -18,7 +18,7 @@ splitting data manually.
 
 ## 3. Run Strategy Comparison
 ```
-python strategy_runner.py --mode comparison --data <data_path> \
+python strategy_runner.py --mode compare --data <data_path> \
     --include-momentum --timeframe 5min
 ```
 This evaluates multiple strategies using the new default thresholds (0.55/0.45)
@@ -27,7 +27,7 @@ and applies commission and slippage from `config.py` to momentum strategies.
 ## 4. Run a Single Strategy
 ```
 python strategy_runner.py --mode single --data <data_path> \
-    --model-type random_forest --timeframe 5min
+    --audit-model random_forest --timeframe 5min
 ```
 The script automatically splits data 70/30 for training and testing and uses the
 central `ThresholdManager` for signal generation.

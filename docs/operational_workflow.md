@@ -51,6 +51,15 @@ Adjust thresholds and transaction cost settings in `config.py`:
 - `BUY_THRESHOLD` / `SELL_THRESHOLD`
 - `COMMISSION_RATE` / `SLIPPAGE_RATE`
 
+Default configuration:
+```python
+BUY_THRESHOLD = 0.55
+SELL_THRESHOLD = 0.45
+USE_ADAPTIVE_THRESHOLDS = 'always'
+BUY_PERCENTILE = 70
+SELL_PERCENTILE = 30
+```
+
 These values are consumed by `ThresholdManager` and momentum adapters during
 backtests.
 

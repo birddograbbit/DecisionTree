@@ -5,7 +5,7 @@ Base strategy interface for trading strategies.
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from src.utils.threshold_manager import ThresholdManager
 
 class BaseStrategy(ABC):
@@ -34,30 +34,6 @@ class BaseStrategy(ABC):
             self.threshold_manager = ThresholdManager(self.config)
         return self.threshold_manager
 
-    def _adjust_thresholds_if_needed(self, predictions):
-        """
-        Get appropriate thresholds based on configuration and predictions.
-        
-        This method is deprecated - use get_thresholds() instead.
-        Kept for backward compatibility.
-        
-        Parameters:
-        -----------
-        predictions : np.ndarray
-            Model prediction probabilities
-        
-        Returns:
-        --------
-        tuple
-            (adjusted_buy_threshold, adjusted_sell_threshold)
-        """
-        warnings.warn(
-            "_adjust_thresholds_if_needed is deprecated. Use get_thresholds() instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        return self.get_thresholds(predictions)
-    
     def get_thresholds(self, predictions=None):
         """
         Get appropriate buy and sell thresholds.
@@ -233,7 +209,7 @@ class BaseStrategy(ABC):
         # Default: single daily timeframe
         return ['1D']
     
-    def get_order_management_config(self) -> Dict[str, any]:
+    def get_order_management_config(self) -> Dict[str, Any]:
         """
         Get order management configuration for this strategy.
         
@@ -241,7 +217,7 @@ class BaseStrategy(ABC):
         
         Returns:
         --------
-        Dict[str, any]
+        Dict[str, Any]
             Configuration dictionary with keys:
             - order_type: 'market' or 'limit'
             - limit_offset_atr: ATR multiplier for limit orders

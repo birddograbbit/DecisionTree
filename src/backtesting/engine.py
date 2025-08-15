@@ -16,7 +16,12 @@ class BacktestEngine:
     """
     Engine for backtesting trading strategies.
     """
-    def __init__(self, initial_capital=100000.0, commission=0.0005, slippage=0.0001):
+    def __init__(
+        self,
+        initial_capital: float = 100000.0,
+        commission: float = config.COMMISSION_RATE,
+        slippage: float = config.SLIPPAGE_RATE,
+    ):
         """
         Initialize backtesting engine.
         
@@ -24,10 +29,10 @@ class BacktestEngine:
         -----------
         initial_capital : float, default=100000.0
             Initial capital for backtesting
-        commission : float, default=0.0005
-            Commission rate per trade (0.05%)
-        slippage : float, default=0.0001
-            Slippage rate per trade (0.01%)
+        commission : float, default=config.COMMISSION_RATE
+            Commission rate per trade
+        slippage : float, default=config.SLIPPAGE_RATE
+            Slippage rate per trade
         """
         self.initial_capital = initial_capital
         self.capital = initial_capital
@@ -167,11 +172,13 @@ class BacktestEngine:
                     del self.positions[symbol]
             
             # Update equity curve
-            total_position_value = sum(
-                data[s].loc[date, 'close'] * pos['size'] 
-                for s, pos in self.positions.items() 
-                if date in data[s].index
-            )
+            total_position_value = 0.0
+            for s, pos in self.positions.items():
+                if date in data[s].index:
+                    price = data[s].loc[date, 'close']
+                    if isinstance(price, pd.Series):
+                        price = price.iloc[0]
+                    total_position_value += float(price) * pos['size']
             self.equity_curve.loc[date, 'cash'] = self.capital
             self.equity_curve.loc[date, 'holdings'] = total_position_value
             self.equity_curve.loc[date, 'equity'] = self.capital + total_position_value

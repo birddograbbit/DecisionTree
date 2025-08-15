@@ -17,7 +17,9 @@ DECISION_TREE_CONFIG = {
     'position_sizing': 'confidence',
     'consecutive_buys': False,
     'min_holding_days': 1,
-    'use_adaptive_thresholds': 'never'  # Use standard thresholds
+    'use_adaptive_thresholds': 'always',  # Always use adaptive thresholds
+    'buy_percentile': 70,
+    'sell_percentile': 30
 }
 
 # Decision Tree (Calibrated) strategy configuration
@@ -33,8 +35,8 @@ DECISION_TREE_CALIBRATED_CONFIG = {
     'consecutive_buys': False,
     'min_holding_days': 1,
     'use_adaptive_thresholds': 'always',  # Always use adaptive thresholds
-    'buy_percentile': 80,                 # Use 80th percentile as buy threshold
-    'sell_percentile': 20                 # Use 20th percentile as sell threshold
+    'buy_percentile': 70,
+    'sell_percentile': 30
 }
 
 # Random Forest strategy configuration
@@ -49,7 +51,9 @@ RANDOM_FOREST_CONFIG = {
     'position_sizing': 'confidence',
     'consecutive_buys': False,
     'min_holding_days': 1,
-    'use_adaptive_thresholds': 'auto'  # Use adaptive thresholds if needed
+    'use_adaptive_thresholds': 'always',  # Always use adaptive thresholds
+    'buy_percentile': 70,
+    'sell_percentile': 30
 }
 
 # Random Forest (Calibrated) strategy configuration
@@ -66,8 +70,8 @@ RANDOM_FOREST_CALIBRATED_CONFIG = {
     'consecutive_buys': False,
     'min_holding_days': 1,
     'use_adaptive_thresholds': 'always',  # Always use adaptive thresholds
-    'buy_percentile': 80,                 # Use 80th percentile as buy threshold
-    'sell_percentile': 20                 # Use 20th percentile as sell threshold
+    'buy_percentile': 70,
+    'sell_percentile': 30
 }
 
 # XGBoost with fixed position sizing

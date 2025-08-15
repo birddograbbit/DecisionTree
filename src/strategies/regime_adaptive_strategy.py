@@ -18,6 +18,7 @@ from src.engines.signal_engine import SignalEngine
 from src.features.feature_engineering import engineer_features
 from src.backtesting.engine import BacktestEngine
 from src.models.model_factory import ModelFactory
+import config as global_config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -82,10 +83,19 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
         self.regime_models = {}
         
         # Initialize backtest_engine (added to fix missing attribute issue)
+        timeframe = config.get('timeframe', 'daily')
+        commission = config.get(
+            'commission',
+            global_config.TRANSACTION_COST_5MIN if timeframe in ('5min', '5T') else global_config.TRANSACTION_COST,
+        )
+        slippage = config.get(
+            'slippage',
+            global_config.SLIPPAGE_5MIN if timeframe in ('5min', '5T') else global_config.SLIPPAGE_RATE,
+        )
         self.backtest_engine = BacktestEngine(
-            initial_capital=self.config.get('initial_capital', 100000.0),
-            commission=self.config.get('commission', 0.001),
-            slippage=self.config.get('slippage', 0.001)
+            initial_capital=config.get('initial_capital', global_config.INITIAL_CAPITAL),
+            commission=commission,
+            slippage=slippage,
         )
         
     def _add_default_regime_params(self):
@@ -649,9 +659,15 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
             # Ensure backtest_engine is initialized (fix for the missing attribute error)
             if not hasattr(self, 'backtest_engine'):
                 self.backtest_engine = BacktestEngine(
-                    initial_capital=self.config.get('initial_capital', 100000.0),
-                    commission=self.config.get('commission', 0.001),
-                    slippage=self.config.get('slippage', 0.001)
+                    initial_capital=self.config.get('initial_capital', global_config.INITIAL_CAPITAL),
+                    commission=self.config.get(
+                        'commission',
+                        global_config.TRANSACTION_COST_5MIN if timeframe in ('5min', '5T') else global_config.TRANSACTION_COST,
+                    ),
+                    slippage=self.config.get(
+                        'slippage',
+                        global_config.SLIPPAGE_5MIN if timeframe in ('5min', '5T') else global_config.SLIPPAGE_RATE,
+                    ),
                 )
             
             # Ensure regimes are detected for the entire dataset
@@ -748,9 +764,15 @@ class RegimeAdaptiveStrategy(TrendFollowingStrategy):
             # Ensure we have a backtest_engine
             if not hasattr(self, 'backtest_engine'):
                 self.backtest_engine = BacktestEngine(
-                    initial_capital=self.config.get('initial_capital', 100000.0),
-                    commission=self.config.get('commission', 0.001),
-                    slippage=self.config.get('slippage', 0.001)
+                    initial_capital=self.config.get('initial_capital', global_config.INITIAL_CAPITAL),
+                    commission=self.config.get(
+                        'commission',
+                        global_config.TRANSACTION_COST_5MIN if timeframe in ('5min', '5T') else global_config.TRANSACTION_COST,
+                    ),
+                    slippage=self.config.get(
+                        'slippage',
+                        global_config.SLIPPAGE_5MIN if timeframe in ('5min', '5T') else global_config.SLIPPAGE_RATE,
+                    ),
                 )
             
             # Split data if not provided

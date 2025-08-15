@@ -42,7 +42,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger('hyperparameter_optimization')
 
-def load_data(data_path, symbol='SPY'):
+def load_data(data_path, symbol='SPY', timeframe='daily'):
     """
     Load and preprocess historical price data.
     
@@ -52,6 +52,8 @@ def load_data(data_path, symbol='SPY'):
         Path to the data file or directory
     symbol : str, default='SPY'
         Symbol for the data
+    timeframe : str, default='daily'
+        Timeframe identifier used to filter files (e.g., 'daily', '5min')
         
     Returns:
     --------
@@ -60,24 +62,31 @@ def load_data(data_path, symbol='SPY'):
     """
     # Check if the path points to a file or directory
     if os.path.isfile(data_path):
-        # Load data from single file
         df = pd.read_csv(data_path, index_col=0, parse_dates=True)
     else:
-        # Look for CSV files in the directory
-        csv_files = [f for f in os.listdir(data_path) if f.endswith('.csv') and symbol in f]
-        
+        csv_files = [
+            f for f in os.listdir(data_path)
+            if f.endswith('.csv') and symbol in f
+        ]
+
+        if timeframe.lower() in ['5min', '5m', '5t']:
+            csv_files = [f for f in csv_files if '5_mins' in f]
+        elif timeframe.lower() in ['1min', '1m']:
+            csv_files = [f for f in csv_files if '1_min' in f]
+        else:  # daily
+            csv_files = [f for f in csv_files if '1_day' in f or 'daily' in f]
+
         if not csv_files:
-            raise FileNotFoundError(f"No CSV files found for {symbol} in {data_path}")
-        
-        # Load and concatenate all matching files
+            raise FileNotFoundError(
+                f"No CSV files found for {symbol} with timeframe {timeframe} in {data_path}"
+            )
+
         dfs = []
         for file in csv_files:
             file_path = os.path.join(data_path, file)
             dfs.append(pd.read_csv(file_path, index_col=0, parse_dates=True))
-        
+
         df = pd.concat(dfs)
-        
-        # Sort by date
         df = df.sort_index()
     
     # Preprocess data
@@ -215,7 +224,7 @@ def optimize_hyperparameters(args):
         return
     
     # Load data
-    df = load_data(args.data, args.symbol)
+    df = load_data(args.data, args.symbol, args.timeframe)
     
     # Prepare features, target, and price series
     X, y, prices = prepare_features_and_target(df, args.lookback)
@@ -306,6 +315,10 @@ def parse_arguments():
     
     parser.add_argument('--symbol', type=str, default='SPY',
                         help='Trading symbol (default: SPY)')
+
+    parser.add_argument('--timeframe', type=str, choices=['daily', '5min', '1min'],
+                        default='daily',
+                        help='Data timeframe to use')
     
     parser.add_argument('--regime-specific', action='store_true',
                         help='Perform regime-specific optimization')

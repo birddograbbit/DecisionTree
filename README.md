@@ -40,6 +40,10 @@ pip install -r requirements-testing.txt  # install test dependencies
 python strategy_runner.py --data data/raw --model random_forest --mode single --output quick_test
 ```
 
+### Configuration Highlights
+- Default confidence thresholds: **BUY 0.55**, **SELL 0.45**
+- Adaptive thresholds enabled by default (`USE_ADAPTIVE_THRESHOLDS='always'`)
+
 ## 📊 Comprehensive System Testing Guide
 
 This guide provides step-by-step testing procedures to validate all system capabilities. Tests progress from basic functionality to advanced features.

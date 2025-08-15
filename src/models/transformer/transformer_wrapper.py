@@ -212,7 +212,7 @@ class TransformerModelWrapper:
                 try:
                     # Forward pass
                     outputs = self.model(batch_X)
-                    loss = criterion(outputs.squeeze(), batch_y.float())
+                    loss = criterion(outputs.view(-1), batch_y.float())
                     
                     # Backward pass
                     optimizer.zero_grad()

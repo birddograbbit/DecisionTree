@@ -133,8 +133,7 @@ def load_data(data_path, symbol='SPY', timeframe='daily', train_data=None, test_
     return df
 
 def run_feature_audit(data_path, output_dir, model_type='random_forest',
-                     top_n_features=None, audit_only=False, symbol='SPY', timeframe='daily',
-                     train_data=None, test_data=None, asset_type=None):
+                     top_n_features=None, audit_only=False, symbol='SPY', timeframe='daily'):
     """
     Run feature importance audit on the data.
     
@@ -152,7 +151,7 @@ def run_feature_audit(data_path, output_dir, model_type='random_forest',
         If True, only perform audit without affecting main workflow
     symbol : str, default='SPY'
         Trading symbol
-        
+
     Returns:
     --------
     tuple
@@ -170,9 +169,6 @@ def run_feature_audit(data_path, output_dir, model_type='random_forest',
         data_path,
         symbol=symbol,
         timeframe=timeframe,
-        train_data=train_data,
-        test_data=test_data,
-        asset_type=asset_type,
     )
     
     # Use config default if not specified
@@ -371,7 +367,6 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         top_features, audit_results = run_feature_audit(
             data_path, output_dir, audit_model, top_n_features, audit_only=True,
             symbol=symbol, timeframe=timeframe,
-            train_data=train_data, test_data=test_data, asset_type=asset_type
         )
         print(f"Feature audit completed. Selected {len(top_features)} features.")
         
@@ -712,7 +707,6 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
         top_features, audit_results = run_feature_audit(
             data_path, output_dir, audit_model, top_n_features, audit_only=True,
             symbol=symbol, timeframe=timeframe,
-            train_data=train_data, test_data=test_data, asset_type=asset_type
         )
         print(f"Feature audit completed. Selected {len(top_features)} features.")
     
@@ -1049,9 +1043,6 @@ def main():
             audit_only=True,
             symbol=args.symbol,
             timeframe=args.timeframe,
-            train_data=args.train_data,
-            test_data=args.test_data,
-            asset_type=args.asset_type,
         )
     elif args.mode == 'single':
         run_single_strategy(

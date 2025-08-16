@@ -54,6 +54,15 @@ class SignalEngine:
         use_adaptive = self.threshold_manager._should_use_adaptive_thresholds(predictions)
         return use_adaptive, buy_threshold, sell_threshold
         
+    def get_position_size(self, prob, max_size=1.0, vol_target=0.10):
+        """Edge-based position sizing with simple volatility targeting."""
+        edge = abs(prob - 0.5)
+        if edge < 0.02:
+            return 0.0
+        base_size = np.clip(edge * 4, 0, max_size)
+        vol_scalar = min(1.0, vol_target / 0.15)
+        return base_size * vol_scalar
+
     def generate_signals(self, predictions, dates, symbol='SPY', custom_thresholds=None):
         """
         Generate trading signals from model predictions.
@@ -92,7 +101,7 @@ class SignalEngine:
             signal = self.threshold_manager.prob_to_signal(probability, predictions)
 
             # Determine position size using centralized logic
-            position_size = self.threshold_manager.get_position_size(probability, self.position_sizing)
+            position_size = self.get_position_size(probability)
             if signal == 0:
                 position_size = 0.0
 
@@ -113,7 +122,8 @@ class SignalEngine:
 
         return signals_df
 
-    def apply_filters(self, signals, consecutive_buys=False, min_holding_days=1, max_holding_days=None):
+    def apply_filters(self, signals, consecutive_buys=False, min_holding_days=1, max_holding_days=None,
+                      max_trades_per_day=None):
         """
         Apply filtering rules to trading signals.
         
@@ -202,6 +212,22 @@ class SignalEngine:
                         in_position = False
                         
                         print(f"Forced exit on {date.strftime('%Y-%m-%d')} due to max holding period of {max_holding_days} days")
+
+        # Limit number of trades per day if specified
+        if max_trades_per_day is not None:
+            filtered_signals['date_only'] = filtered_signals['date'].dt.date
+            for date in filtered_signals['date_only'].unique():
+                mask = filtered_signals['date_only'] == date
+                date_signals = filtered_signals[mask & (filtered_signals['signal'] != 0)]
+                if len(date_signals) > max_trades_per_day:
+                    filtered_signals.loc[mask, 'edge'] = abs(
+                        filtered_signals.loc[mask, 'probability'] - 0.5)
+                    keep_idx = filtered_signals.loc[mask].nlargest(
+                        max_trades_per_day, 'edge').index
+                    drop_idx = filtered_signals.loc[mask].index.difference(keep_idx)
+                    filtered_signals.loc[drop_idx, 'signal'] = 0
+                    filtered_signals.loc[drop_idx, 'position_size'] = 0.0
+            filtered_signals = filtered_signals.drop(columns=['date_only', 'edge'], errors='ignore')
 
         return filtered_signals
     

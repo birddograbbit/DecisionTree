@@ -85,6 +85,25 @@ class ModelAdapter(BaseEstimator, ClassifierMixin):
         # Format as 2D array with probabilities for both classes
         return np.vstack((1 - y_prob, y_prob)).T
 
+
+def add_intraday_features(df, timeframe='5min'):
+    """Add intraday-specific features to DataFrame."""
+    df['hour'] = df.index.hour
+    df['minute'] = df.index.minute
+    minutes_from_open = (df.index.hour * 60 + df.index.minute) - (9 * 60 + 30)
+    df['minutes_from_open'] = minutes_from_open
+    df['minutes_to_close'] = (16 * 60) - minutes_from_open
+    df['is_first_30m'] = (df['minutes_from_open'] <= 30).astype(int)
+    df['is_power_hour'] = (df.index.hour >= 15).astype(int)
+    df['volatility_5'] = df['close'].pct_change().rolling(5).std()
+    df['volatility_15'] = df['close'].pct_change().rolling(15).std()
+    df['rsi_7'] = calculate_rsi(df, window=7)
+    df['vwap_distance'] = (df['close'] - df['vwap']) / df['vwap']
+    df['ret_1bar'] = df['close'].pct_change(1)
+    df['ret_3bar'] = df['close'].pct_change(3)
+    df['ret_6bar'] = df['close'].pct_change(6)
+    return df
+
 def add_technical_indicators(df, lookback_period=10):
     """
     Add technical indicators to price data.
@@ -183,9 +202,6 @@ def engineer_features(df, lookback_period=10, timeframe: str = 'daily'):
     # Make a copy to avoid warnings
     df_features = df_indicators.copy()
 
-    # Ensure we're not using any future information by using only
-    # indicators that look backwards, not forwards
-
     # Base feature set used for all timeframes
     features = [
         'sma_ratio', 'rsi', 'std', 'bb_position',
@@ -196,18 +212,11 @@ def engineer_features(df, lookback_period=10, timeframe: str = 'daily'):
     ]
 
     if timeframe in ['5min', '1min']:
-        # Add intraday-specific features
-        df_features['hour'] = df_features.index.hour
-        df_features['minute'] = df_features.index.minute
-        df_features['ema_5'] = df_features['close'].ewm(span=5).mean()
-        df_features['rsi_5'] = calculate_rsi(df_features, window=5)
-        df_features['volatility_5'] = df_features['returns'].rolling(window=5).std()
-        df_features['lag_return_1'] = df_features['returns'].shift(1)
-        df_features['lag_return_3'] = df_features['returns'].shift(3)
-
+        df_features = add_intraday_features(df_features, timeframe)
         features.extend([
-            'hour', 'minute', 'ema_5', 'rsi_5',
-            'volatility_5', 'lag_return_1', 'lag_return_3'
+            'hour', 'minute', 'minutes_from_open', 'minutes_to_close',
+            'is_first_30m', 'is_power_hour', 'volatility_5', 'volatility_15',
+            'rsi_7', 'vwap_distance', 'ret_1bar', 'ret_3bar', 'ret_6bar'
         ])
 
     df_features.replace([np.inf, -np.inf], np.nan, inplace=True)

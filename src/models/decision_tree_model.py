@@ -10,6 +10,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.pipeline import make_pipeline, Pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import TimeSeriesSplit
 from .base_model import BaseModel
 
 class DecisionTreeModel(BaseModel):
@@ -33,8 +34,9 @@ class DecisionTreeModel(BaseModel):
         """
         return self._base
 
-    def __init__(self, calibrate=False, max_depth=5, min_samples_split=2, min_samples_leaf=1, 
-                 max_features=None, criterion='gini', random_state=42):
+    def __init__(self, calibrate=False, max_depth=6, min_samples_split=100, min_samples_leaf=50,
+                 max_features=None, criterion='gini', random_state=42,
+                 ccp_alpha=0.001, class_weight='balanced'):
         """
         Initialize the Decision Tree model.
         
@@ -54,6 +56,10 @@ class DecisionTreeModel(BaseModel):
             Function to measure the quality of a split
         random_state : int, default=42
             Random seed for reproducibility
+        ccp_alpha : float, default=0.001
+            Complexity parameter used for Minimal Cost-Complexity Pruning
+        class_weight : dict or 'balanced', default='balanced'
+            Weights associated with classes to handle imbalance
         """
         self.params = {
             'max_depth': max_depth,
@@ -61,7 +67,9 @@ class DecisionTreeModel(BaseModel):
             'min_samples_leaf': min_samples_leaf,
             'max_features': max_features,
             'criterion': criterion,
-            'random_state': random_state
+            'random_state': random_state,
+            'ccp_alpha': ccp_alpha,
+            'class_weight': class_weight
         }
         self.calibrate = calibrate
         self._base = DecisionTreeClassifier(**self.params)
@@ -91,9 +99,10 @@ class DecisionTreeModel(BaseModel):
         pipeline = make_pipeline(StandardScaler(), self._base)
 
         if self.calibrate:
-            # Calibrate probabilities using isotonic regression
+            # Calibrate probabilities using sigmoid (Platt scaling) with time-aware CV
+            cv_split = TimeSeriesSplit(n_splits=5)
             self._clf = CalibratedClassifierCV(
-                pipeline, method="isotonic", cv=5
+                pipeline, method="sigmoid", cv=cv_split
             )
             self._clf.fit(X, y)
         else:

@@ -33,9 +33,9 @@ class RandomForestModel(BaseModel):
         """
         return self._base
 
-    def __init__(self, calibrate=False, n_estimators=100, max_depth=5, min_samples_split=2, 
-                 min_samples_leaf=1, max_features='sqrt', criterion='gini', 
-                 random_state=42, n_jobs=-1, **kwargs):
+    def __init__(self, calibrate=False, n_estimators=300, max_depth=8, min_samples_split=2,
+                 min_samples_leaf=50, max_features='sqrt', criterion='gini',
+                 random_state=42, n_jobs=-1, class_weight='balanced_subsample', **kwargs):
         """
         Initialize the Random Forest model.
         
@@ -72,7 +72,8 @@ class RandomForestModel(BaseModel):
             'max_features': max_features,
             'criterion': criterion,
             'random_state': random_state,
-            'n_jobs': n_jobs
+            'n_jobs': n_jobs,
+            'class_weight': class_weight
         }
         current_params.update(kwargs) # Update with any kwargs, including new ones like class_weight
 

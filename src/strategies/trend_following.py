@@ -79,7 +79,12 @@ class TrendFollowingStrategy(BaseStrategy):
             (X, y, dates)
         """
         timeframe = self.config.get('timeframe', 'daily')
-        lookback = config.LOOKBACK_PERIOD_5MIN if timeframe == '5min' else config.LOOKBACK_PERIOD
+        if timeframe == '1min':
+            lookback = getattr(config, 'LOOKBACK_PERIOD_1MIN', 390)
+        elif timeframe == '5min':
+            lookback = config.LOOKBACK_PERIOD_5MIN
+        else:
+            lookback = config.LOOKBACK_PERIOD
         return engineer_features(data, lookback_period=lookback, timeframe=timeframe)
 
     def generate_signals(self, features, predictions, dates):
@@ -273,11 +278,11 @@ class TrendFollowingStrategy(BaseStrategy):
         # Run backtest
         commission = self.config.get(
             'commission',
-            config.TRANSACTION_COST_5MIN if timeframe in ('5min', '5T') else config.TRANSACTION_COST,
+            config.TRANSACTION_COST_5MIN if timeframe in ('5min', '5T', '1min', '1T') else config.TRANSACTION_COST,
         )
         slippage = self.config.get(
             'slippage',
-            config.SLIPPAGE_5MIN if timeframe in ('5min', '5T') else config.SLIPPAGE_RATE,
+            config.SLIPPAGE_5MIN if timeframe in ('5min', '5T', '1min', '1T') else config.SLIPPAGE_RATE,
         )
         backtest_engine = BacktestEngine(
             initial_capital=self.config.get('initial_capital', config.INITIAL_CAPITAL),

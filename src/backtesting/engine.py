@@ -19,7 +19,7 @@ class BacktestEngine:
     def __init__(
         self,
         initial_capital: float = 100000.0,
-        commission: float = config.COMMISSION_RATE,
+        commission: float = config.TRANSACTION_COST,
         slippage: float = config.SLIPPAGE_RATE,
     ):
         """
@@ -29,7 +29,7 @@ class BacktestEngine:
         -----------
         initial_capital : float, default=100000.0
             Initial capital for backtesting
-        commission : float, default=config.COMMISSION_RATE
+        commission : float, default=config.TRANSACTION_COST
             Commission rate per trade
         slippage : float, default=config.SLIPPAGE_RATE
             Slippage rate per trade
@@ -90,7 +90,7 @@ class BacktestEngine:
         self.equity_curve.loc[equity_dates[0], 'equity'] = self.initial_capital
         
         # Iterate through signals
-        for date in equity_dates:
+        for i, date in enumerate(equity_dates):
             # Get signals for this date
             date_signals = signals.loc[date]
             
@@ -124,7 +124,7 @@ class BacktestEngine:
                     size_fraction = signal_row.get('position_size', 1.0)
                     available_capital = self.capital * 0.95  # Keep some cash
                     position_size = (available_capital * size_fraction) / price
-                    cost = position_size * price * (1 + self.slippage) * (1 + self.commission)
+                    cost = position_size * price * (1 + self.slippage + self.commission)
                     
                     if cost <= self.capital:
                         self.positions[symbol] = {
@@ -141,7 +141,7 @@ class BacktestEngine:
                     entry_date = position['entry_date']
                     
                     # Calculate proceeds
-                    proceeds = position_size * price * (1 - self.slippage) * (1 - self.commission)
+                    proceeds = position_size * price * (1 - self.slippage - self.commission)
                     self.capital += proceeds
                     
                     # Calculate holding period
@@ -171,6 +171,41 @@ class BacktestEngine:
                     # Remove position
                     del self.positions[symbol]
             
+            # End-of-day flattening for intraday strategies
+            next_date = equity_dates[i + 1] if i + 1 < len(equity_dates) else None
+            if timeframe in ['5min', '5T', '5m', '1min', '1T', '1m'] and (
+                next_date is None or next_date.date() != date.date()
+            ):
+                for symbol, position in list(self.positions.items()):
+                    price_data = data.get(symbol)
+                    if price_data is None or date not in price_data.index:
+                        continue
+                    price = price_data.loc[date, 'close']
+                    if isinstance(price, pd.Series):
+                        price = price.iloc[0]
+                    position_size = position['size']
+                    entry_price = position['entry_price']
+                    entry_date = position['entry_date']
+                    proceeds = position_size * price * (1 - self.slippage - self.commission)
+                    self.capital += proceeds
+                    time_diff = date - entry_date
+                    holding_days = time_diff.days + time_diff.seconds / 86400.0
+                    bars_per_day = 78 if timeframe.startswith('5') else 390
+                    holding_bars = int(holding_days * bars_per_day)
+                    self.trades.append({
+                        'symbol': symbol,
+                        'entry_date': entry_date,
+                        'entry_price': entry_price,
+                        'exit_date': date,
+                        'exit_price': price,
+                        'size': position_size,
+                        'pnl': proceeds - (position_size * entry_price),
+                        'return': (price / entry_price) - 1,
+                        'holding_days': holding_days,
+                        'holding_bars': holding_bars,
+                    })
+                    del self.positions[symbol]
+
             # Update equity curve
             total_position_value = 0.0
             for s, pos in self.positions.items():
@@ -195,7 +230,7 @@ class BacktestEngine:
             exit_price = data[symbol].loc[last_date, 'close']
             
             # Calculate proceeds
-            proceeds = position_size * exit_price * (1 - self.slippage) * (1 - self.commission)
+            proceeds = position_size * exit_price * (1 - self.slippage - self.commission)
             self.capital += proceeds
             
             # Calculate holding period

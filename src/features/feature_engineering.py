@@ -1,10 +1,13 @@
 import numpy as np
 import pandas as pd
+import logging
 from sklearn.preprocessing import StandardScaler
 from sklearn.inspection import permutation_importance
 from sklearn.base import BaseEstimator, ClassifierMixin
 from src.features.indicators import *
 import config
+
+logger = logging.getLogger(__name__)
 
 class ModelAdapter(BaseEstimator, ClassifierMixin):
     """
@@ -254,22 +257,28 @@ def scale_features(X_train, X_test):
     tuple
         (X_train_scaled, X_test_scaled, scaler)
     """
+    if len(X_train) < 100:
+        logger.warning(
+            "Insufficient samples after feature engineering: %d", len(X_train)
+        )
+        return X_train.copy(), X_test.copy(), None
+
     scaler = StandardScaler()
-    
+
     # Fit scaler on training data
     X_train_scaled = pd.DataFrame(
         scaler.fit_transform(X_train),
         columns=X_train.columns,
         index=X_train.index
     )
-    
+
     # Transform test data
     X_test_scaled = pd.DataFrame(
         scaler.transform(X_test),
         columns=X_test.columns,
         index=X_test.index
     )
-    
+
     return X_train_scaled, X_test_scaled, scaler
 
 def audit_features(model, X_train, y_train, X_test, y_test, n_repeats=10, n_top_features=10, random_state=42, threshold=0.5):
@@ -508,7 +517,12 @@ def prepare_train_test_data(df, train_end_date=None, prune_features_flag=False,
         (X_train, X_test, y_train, y_test, dates_train, dates_test, scaler)
     """
     # Determine lookback based on timeframe
-    lookback = config.LOOKBACK_PERIOD_5MIN if timeframe in ['5min', '1min'] else config.LOOKBACK_PERIOD
+    if timeframe == '1min':
+        lookback = getattr(config, 'LOOKBACK_PERIOD_1MIN', 390)
+    elif timeframe == '5min':
+        lookback = config.LOOKBACK_PERIOD_5MIN
+    else:
+        lookback = config.LOOKBACK_PERIOD
 
     # Add technical indicators
     df_features = add_technical_indicators(df, lookback)

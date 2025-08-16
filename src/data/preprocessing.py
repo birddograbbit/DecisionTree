@@ -130,6 +130,7 @@ def load_ibkr_data(train_file, test_file):
         print(f"Warning: Found {missing_count} missing values in the data.")
         combined_data = combined_data.dropna()
         print(f"Dropped rows with missing values. New shape: {combined_data.shape}")
+    validate_data(combined_data, timeframe='daily')
     return combined_data
 
 

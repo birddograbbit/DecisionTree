@@ -6,12 +6,13 @@ import os
 import pickle
 import numpy as np
 import pandas as pd
+import logging
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.pipeline import make_pipeline, Pipeline
-from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import TimeSeriesSplit
 from .base_model import BaseModel
+
+logger = logging.getLogger(__name__)
 
 class DecisionTreeModel(BaseModel):
     """
@@ -34,9 +35,9 @@ class DecisionTreeModel(BaseModel):
         """
         return self._base
 
-    def __init__(self, calibrate=False, max_depth=6, min_samples_split=100, min_samples_leaf=50,
+    def __init__(self, calibrate=False, max_depth=6, min_samples_split=100, min_samples_leaf=20,
                  max_features=None, criterion='gini', random_state=42,
-                 ccp_alpha=0.001, class_weight='balanced'):
+                 ccp_alpha=0.0001, class_weight='balanced'):
         """
         Initialize the Decision Tree model.
         
@@ -44,11 +45,11 @@ class DecisionTreeModel(BaseModel):
         -----------
         calibrate : bool, default=False
             Whether to use probability calibration
-        max_depth : int or None, default=5
+        max_depth : int or None, default=6
             Maximum depth of the tree
-        min_samples_split : int, default=2
+        min_samples_split : int, default=100
             Minimum samples required to split an internal node
-        min_samples_leaf : int, default=1
+        min_samples_leaf : int, default=20
             Minimum samples required at a leaf node
         max_features : int, float, str, or None, default=None
             Number of features to consider for best split
@@ -56,7 +57,7 @@ class DecisionTreeModel(BaseModel):
             Function to measure the quality of a split
         random_state : int, default=42
             Random seed for reproducibility
-        ccp_alpha : float, default=0.001
+        ccp_alpha : float, default=0.0001
             Complexity parameter used for Minimal Cost-Complexity Pruning
         class_weight : dict or 'balanced', default='balanced'
             Weights associated with classes to handle imbalance
@@ -73,7 +74,7 @@ class DecisionTreeModel(BaseModel):
         }
         self.calibrate = calibrate
         self._base = DecisionTreeClassifier(**self.params)
-        self._clf = None  # Will hold CalibratedClassifierCV or Pipeline
+        self._clf = None  # Will hold CalibratedClassifierCV or DecisionTreeClassifier
         self.feature_names = None
 
     def train(self, X, y):
@@ -94,20 +95,27 @@ class DecisionTreeModel(BaseModel):
         """
         # Store feature names if available (for feature importance)
         self.feature_names = X.columns if hasattr(X, 'columns') else None
-        
-        # Build a pipeline with scaling
-        pipeline = make_pipeline(StandardScaler(), self._base)
 
         if self.calibrate:
             # Calibrate probabilities using sigmoid (Platt scaling) with time-aware CV
             cv_split = TimeSeriesSplit(n_splits=5)
             self._clf = CalibratedClassifierCV(
-                pipeline, method="sigmoid", cv=cv_split
+                self._base, method="sigmoid", cv=cv_split
             )
             self._clf.fit(X, y)
+            estimator = self._clf.calibrated_classifiers_[0].estimator
         else:
-            self._clf = pipeline
+            self._clf = self._base
             self._clf.fit(X, y)
+            estimator = self._clf
+
+        if hasattr(estimator, "get_depth"):
+            logger.info(
+                "Trained decision tree depth: %d, leaves: %d",
+                estimator.get_depth(),
+                estimator.get_n_leaves(),
+            )
+
         return self
 
     def predict(self, X):
@@ -135,21 +143,14 @@ class DecisionTreeModel(BaseModel):
         dict or np.ndarray
             Feature importance scores
         """
-        # Determine the fitted estimator from the training pipeline
-        estimator = None
-        if isinstance(self._clf, Pipeline):
-            estimator = self._clf.steps[-1][1]
-        elif isinstance(self._clf, CalibratedClassifierCV):
+        # Determine the fitted estimator
+        if isinstance(self._clf, CalibratedClassifierCV):
             if hasattr(self._clf, 'calibrated_classifiers_') and self._clf.calibrated_classifiers_:
-                base = self._clf.calibrated_classifiers_[0].estimator
+                estimator = self._clf.calibrated_classifiers_[0].estimator
             else:
-                base = self._clf.estimator
-            if isinstance(base, Pipeline):
-                estimator = base.steps[-1][1]
-            else:
-                estimator = base
-        elif self._base is not None:
-            estimator = self._base
+                estimator = self._clf.estimator
+        else:
+            estimator = self._clf
 
         if estimator is None or not hasattr(estimator, "feature_importances_"):
             raise ValueError("Model has not been trained yet or does not expose feature_importances_.")

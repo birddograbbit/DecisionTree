@@ -177,7 +177,12 @@ def run_feature_audit(data_path, output_dir, model_type='random_forest',
     
     # Determine lookback period based on timeframe
     intraday = timeframe in ['5min', '1min']
-    lookback_period = config.LOOKBACK_PERIOD_5MIN if intraday else config.LOOKBACK_PERIOD
+    if timeframe == '1min':
+        lookback_period = getattr(config, 'LOOKBACK_PERIOD_1MIN', 390)
+    elif timeframe == '5min':
+        lookback_period = config.LOOKBACK_PERIOD_5MIN
+    else:
+        lookback_period = config.LOOKBACK_PERIOD
     print(f"Using lookback period: {lookback_period} {'bars' if intraday else 'days'}")
     
     # Add technical indicators with appropriate lookback

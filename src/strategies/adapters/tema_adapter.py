@@ -452,13 +452,23 @@ class TEMAAdapter(BaseStrategy):
         position = signals['signal'].shift(1).fillna(0)
         returns = position * aligned_prices['close'].pct_change()
 
-        commission = self.config.get('commission', config.COMMISSION_RATE)
-        slippage = self.config.get('slippage', config.SLIPPAGE_RATE)
+        timeframe = self.config.get('primary_timeframe', '1h')
+        default_commission = (
+            config.TRANSACTION_COST_5MIN
+            if timeframe in ['5min', '5T', '1min', '1T']
+            else config.TRANSACTION_COST
+        )
+        default_slippage = (
+            config.SLIPPAGE_5MIN
+            if timeframe in ['5min', '5T', '1min', '1T']
+            else config.SLIPPAGE_RATE
+        )
+        commission = self.config.get('commission', default_commission)
+        slippage = self.config.get('slippage', default_slippage)
         trade_changes = signals['signal'].diff().abs().fillna(0)
         returns -= trade_changes * (commission + slippage)
-        
+
         # Determine annualization factor based on timeframe
-        timeframe = self.config.get('primary_timeframe', '1h')
         if timeframe in ['5min', '5T', '5m']:
             # 5-minute bars: 78 bars per day * 252 trading days
             annualization_factor = np.sqrt(78 * 252)

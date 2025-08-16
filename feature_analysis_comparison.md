@@ -1,9 +1,10 @@
-# Feature Analysis Comparison: Daily vs 5-Minute Data
+# Feature Analysis Comparison: Daily vs Intraday Data
 
 ## Implementation Summary
 Successfully implemented timeframe-aware feature analysis with appropriate lookback periods:
 - **Daily data**: 10-day lookback period
 - **5-minute data**: 78-bar lookback period (1 trading day)
+- **1-minute data**: 390-bar lookback period (1 trading day)
 
 ## Test Results
 

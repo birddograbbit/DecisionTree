@@ -120,12 +120,21 @@ class JFKDSRSIAdapter(BaseStrategy):
         position = signals['signal'].shift(1).fillna(0)
         returns = position * aligned_prices['close'].pct_change()
 
-        commission = self.config.get('commission', config.COMMISSION_RATE)
-        slippage = self.config.get('slippage', config.SLIPPAGE_RATE)
+        timeframe = self.config.get('timeframe', '5min') if hasattr(self, 'config') and self.config else '5min'
+        default_commission = (
+            config.TRANSACTION_COST_5MIN
+            if timeframe in ['5min', '5T', '1min', '1T']
+            else config.TRANSACTION_COST
+        )
+        default_slippage = (
+            config.SLIPPAGE_5MIN
+            if timeframe in ['5min', '5T', '1min', '1T']
+            else config.SLIPPAGE_RATE
+        )
+        commission = self.config.get('commission', default_commission)
+        slippage = self.config.get('slippage', default_slippage)
         trade_changes = signals['signal'].diff().abs().fillna(0)
         returns -= trade_changes * (commission + slippage)
-
-        timeframe = self.config.get('timeframe', '5min') if hasattr(self, 'config') and self.config else '5min'
         if timeframe in ['5min', '5T', '5m']:
             annualization_factor = np.sqrt(78 * 252)
             periods_per_year = 78 * 252

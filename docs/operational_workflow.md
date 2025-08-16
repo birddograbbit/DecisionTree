@@ -49,7 +49,8 @@ Additional tests reside under `tests/` and can be executed with `pytest`.
 ## 7. Configuration
 Adjust thresholds and transaction cost settings in `config.py`:
 - `BUY_THRESHOLD` / `SELL_THRESHOLD`
-- `COMMISSION_RATE` / `SLIPPAGE_RATE`
+- `TRANSACTION_COST` / `SLIPPAGE_RATE` (daily)
+- `TRANSACTION_COST_5MIN` / `SLIPPAGE_5MIN` (intraday)
 
 Default configuration:
 ```python

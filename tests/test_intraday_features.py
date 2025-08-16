@@ -34,7 +34,9 @@ def test_engineer_features_adds_intraday_columns():
     df = _make_intraday_dataframe()
     X, y, dates = engineer_features(df, lookback_period=5, timeframe='5min')
     expected = {
-        'hour', 'minute', 'ema_5', 'rsi_5', 'volatility_5', 'lag_return_1', 'lag_return_3'
+        'hour', 'minute', 'minutes_from_open', 'minutes_to_close', 'is_first_30m',
+        'is_power_hour', 'volatility_5', 'volatility_15', 'rsi_7', 'vwap_distance',
+        'ret_1bar', 'ret_3bar', 'ret_6bar'
     }
     assert expected.issubset(set(X.columns))
 
@@ -43,7 +45,9 @@ def test_engineer_features_adds_intraday_columns_1min():
     df = _make_intraday_dataframe(freq='1min')
     X, y, dates = engineer_features(df, lookback_period=5, timeframe='1min')
     expected = {
-        'hour', 'minute', 'ema_5', 'rsi_5', 'volatility_5', 'lag_return_1', 'lag_return_3'
+        'hour', 'minute', 'minutes_from_open', 'minutes_to_close', 'is_first_30m',
+        'is_power_hour', 'volatility_5', 'volatility_15', 'rsi_7', 'vwap_distance',
+        'ret_1bar', 'ret_3bar', 'ret_6bar'
     }
     assert expected.issubset(set(X.columns))
 

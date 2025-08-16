@@ -17,6 +17,32 @@ def _load_csv_files(files: Union[str, List[str]]) -> pd.DataFrame:
     return pd.read_csv(files)
 
 
+def validate_data(df, timeframe='daily'):
+    """Comprehensive data validation."""
+    issues = []
+    if df.index.duplicated().any():
+        issues.append("Duplicate timestamps found")
+
+    if timeframe in ['5min', '1min']:
+        expected_freq = '5T' if timeframe == '5min' else '1T'
+        gaps = df.index.to_series().diff()
+        max_gap = pd.Timedelta(minutes=5 if timeframe == '5min' else 1)
+        if gaps.max() > max_gap * 2:
+            issues.append(f"Large gaps in {timeframe} data")
+
+    for col in df.columns:
+        if 'future' in col.lower() or 'next' in col.lower():
+            issues.append(f"Potential lookahead bias in column: {col}")
+
+    if df.isnull().any().any():
+        issues.append("Missing values detected")
+
+    if issues:
+        raise ValueError(f"Data validation failed: {', '.join(issues)}")
+
+    return True
+
+
 def load_ibkr_data(train_file, test_file):
     """
     Load and combine IBKR historical data files.
@@ -89,18 +115,18 @@ def load_5min_data(train_file, test_file):
     
     # Combine the data
     combined_data = pd.concat([train_data, test_data])
-    
+
     # Convert date column to datetime and handle timezone
     combined_data['date'] = pd.to_datetime(combined_data['date'], utc=True)
     combined_data['date'] = combined_data['date'].dt.tz_convert('UTC').dt.tz_localize(None)
     combined_data.set_index('date', inplace=True)
-    
+
     # Sort by date
     combined_data = combined_data.sort_index()
-    
+
     # Make column names lowercase
     combined_data.columns = combined_data.columns.str.lower()
-    
+
     # Check for missing values
     missing_count = combined_data.isnull().sum().sum()
     if missing_count > 0:
@@ -108,10 +134,12 @@ def load_5min_data(train_file, test_file):
         # Drop rows with any missing values for 5-minute data
         combined_data = combined_data.dropna()
         print(f"Dropped rows with missing values. New shape: {combined_data.shape}")
-    
+
+    validate_data(combined_data, timeframe='5min')
+
     print(f"5-minute data loaded and preprocessed. Shape: {combined_data.shape}")
     print(f"Date range: {combined_data.index.min()} to {combined_data.index.max()}")
-    
+
     return combined_data
 
 
@@ -151,6 +179,8 @@ def load_1min_data(train_file, test_file):
         print(f"Warning: Found {missing_count} missing values in the data.")
         combined_data = combined_data.dropna()
         print(f"Dropped rows with missing values. New shape: {combined_data.shape}")
+
+    validate_data(combined_data, timeframe='1min')
 
     print(f"1-minute data loaded and preprocessed. Shape: {combined_data.shape}")
     print(f"Date range: {combined_data.index.min()} to {combined_data.index.max()}")

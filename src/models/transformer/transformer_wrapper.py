@@ -23,6 +23,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import logging
+from sklearn.base import BaseEstimator, ClassifierMixin
 logger = logging.getLogger(__name__)
 
 from src.models.transformer.sequence_preparation import SequencePreparator, StockSequenceDataset
@@ -31,7 +32,7 @@ from src.models.transformer.sequence_preparation import SequencePreparator, Stoc
 # For now, we'll create a minimal interface
 
 
-class TransformerModelWrapper:
+class TransformerModelWrapper(BaseEstimator, ClassifierMixin):
     """
     Wrapper class that makes TimeSeriesTransformer compatible with BaseModel interface.
     
@@ -130,7 +131,7 @@ class TransformerModelWrapper:
             prediction_length=self.prediction_length
         ).to(self.device)
         
-    def train(self, X, y):
+    def fit(self, X, y):
         """
         Train the transformer model.
         
@@ -234,8 +235,12 @@ class TransformerModelWrapper:
         self.is_fitted = True
         logger.info("Transformer training complete")
         return self
-        
-    def predict(self, X):
+
+    # Backward compatibility
+    def train(self, X, y):
+        return self.fit(X, y)
+
+    def _predict_proba(self, X):
         """
         Generate predictions for given features.
         
@@ -294,6 +299,14 @@ class TransformerModelWrapper:
             predictions = np.concatenate([padding, predictions])
             
         return predictions
+
+    def predict_proba(self, X):
+        probs = self._predict_proba(X)
+        return np.column_stack([1 - probs, probs])
+
+    def predict(self, X):
+        probs = self._predict_proba(X)
+        return (probs >= 0.5).astype(int)
 
     def predict_large_dataset(self, data_array):
         """Predict large numpy array using BatchPredictor."""

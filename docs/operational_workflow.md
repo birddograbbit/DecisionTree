@@ -63,3 +63,19 @@ SELL_PERCENTILE = 30
 These values are consumed by `ThresholdManager` and momentum adapters during
 backtests.
 
+## 8. Symbols and Timeframes
+
+`strategy_runner.py` operates on a single symbol and timeframe per invocation.
+Specify them explicitly:
+
+```bash
+python strategy_runner.py --mode compare --data <data_path> --symbol SPX --timeframe 1min
+```
+
+To analyse multiple symbols or timeframes, run the script in a loop or separate calls.
+
+## 9. Transformer Notes
+
+The transformer model now exposes an sklearn-compatible interface. Cross-validation
+works through the `ModelEngine`, but training remains CPU-intensive on macOS.
+

@@ -114,6 +114,9 @@ class ModelEngine:
         X_array = X.values if hasattr(X, 'values') else X
         
         # Make predictions
+        if hasattr(self.model, 'predict_proba'):
+            proba = self.model.predict_proba(X_array)
+            return proba[:, 1] if proba.ndim == 2 else proba
         return self.model.predict(X_array)
     
     def evaluate(self, X, y):
@@ -233,25 +236,30 @@ class ModelEngine:
         np.ndarray
             Cross-validation scores
         """
-        # Get sklearn model if available
-        if hasattr(self.model, 'model'):
+        # Get sklearn model if available and suitable
+        if hasattr(self.model, 'model') and hasattr(self.model.model, 'fit'):
             sklearn_model = self.model.model
         else:
             # Create a temporary sklearn-compatible wrapper
             from sklearn.base import BaseEstimator, ClassifierMixin
-            
+
+            model_ref = self.model
+
             class ModelWrapper(BaseEstimator, ClassifierMixin):
-                def __init__(self, model):
-                    self.model = model
-                
+                def __init__(self):
+                    self.model = model_ref
+
+                def get_params(self, deep=False):
+                    return {}
+
                 def fit(self, X, y):
                     self.model.train(X, y)
                     return self
-                
+
                 def predict(self, X):
                     return (self.model.predict(X) >= 0.5).astype(int)
-            
-            sklearn_model = ModelWrapper(self.model)
+
+            sklearn_model = ModelWrapper()
         
         # Perform cross-validation, suppressing runtime warnings from sklearn
         with warnings.catch_warnings():

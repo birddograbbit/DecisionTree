@@ -3,6 +3,7 @@ import numpy as np
 from src.models.transformer.transformer_wrapper import TransformerModelWrapper
 import torch
 import unittest.mock as mock
+from src.engines.model_engine import ModelEngine
 
 
 def make_df(n=40):
@@ -48,3 +49,10 @@ def test_single_sample_batch():
     model.train(df.drop('target', axis=1), df['target'])
     preds = model.predict(df.drop('target', axis=1))
     assert len(preds) == len(df)
+
+
+def test_cross_validation_runs():
+    df = make_df(n=40)
+    engine = ModelEngine(model_type='transformer', model_params={'seq_length':5, 'epochs':1, 'batch_size':4, 'device':torch.device('cpu')})
+    engine.train(df.drop('target', axis=1), df['target'], cross_validation=True, cv=2)
+    assert 'cv_scores' in engine.metrics

@@ -27,13 +27,13 @@ SLIPPAGE_RATE = 0.0001  # Slippage rate per trade (0.01%)
 
 # Signal threshold settings
 # Default static thresholds
-BUY_THRESHOLD = 0.55
-SELL_THRESHOLD = 0.45
+BUY_THRESHOLD = 0.51  # Reduced from 0.55 to 0.51 for narrow probability ranges
+SELL_THRESHOLD = 0.49  # Increased from 0.45 to 0.49 for narrow probability ranges
 
 # Adaptive threshold defaults
-USE_ADAPTIVE_THRESHOLDS = 'always'
-BUY_PERCENTILE = 70
-SELL_PERCENTILE = 30
+USE_ADAPTIVE_THRESHOLDS = 'auto'  # Changed from 'always' to 'auto'
+BUY_PERCENTILE = 65  # Reduced from 70 to 65
+SELL_PERCENTILE = 35  # Increased from 30 to 35
 
 # Risk management settings
 MAX_POSITION_SIZE = 0.05  # Maximum position size as fraction of total capital

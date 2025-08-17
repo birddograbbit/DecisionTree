@@ -13,11 +13,13 @@ from src.strategies.trend_following import TrendFollowingStrategy
 from src.strategies.regime_adaptive_strategy import RegimeAdaptiveStrategy
 from src.strategies.adapters import (
     BBRSIADXAdapter,
-    TEMAAdapter,
+    TEMAAdapter, 
     QuodAdapter,
     JFKDSRSIAdapter,
     MPO3TFAdapter,
 )
+from src.strategies.adapters.jfk_dsrsi_full_adapter import JFKDSRSIFullAdapter
+from src.strategies.adapters.mpo_3tf_full_adapter import MPO3TFFullAdapter
 from src.strategies.hybrid_momentum_strategy import HybridMomentumMLStrategy
 from src.strategies.multi_timeframe_strategy import MultiTimeframeStrategy
 
@@ -43,6 +45,8 @@ class StrategyRegistry:
         'quod': QuodAdapter,
         'jfk_dsrsi': JFKDSRSIAdapter,
         'mpo_3tf': MPO3TFAdapter,
+        'jfk_dsrsi_full': JFKDSRSIFullAdapter,
+        'mpo_3tf_full': MPO3TFFullAdapter,
         'hybrid_momentum': HybridMomentumMLStrategy,
         'multi_timeframe': MultiTimeframeStrategy,
     }

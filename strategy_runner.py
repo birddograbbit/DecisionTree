@@ -245,7 +245,8 @@ def run_feature_audit(data_path, output_dir, model_type='random_forest',
         print("No highly correlated features found.")
 
     momentum_strategies = {
-        'bb_rsi_adx', 'tema', 'quod', 'jfk_dsrsi', 'mpo_3tf'
+        'bb_rsi_adx', 'tema', 'quod', 'jfk_dsrsi', 'mpo_3tf',
+        'jfk_dsrsi_full', 'mpo_3tf_full'
     }
     if model_type in momentum_strategies:
         print(f"Feature audit not applicable for momentum strategy {model_type}")
@@ -763,7 +764,8 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
     print(f"Testing data: {len(test_data)} rows ({test_data.index[0]} to {test_data.index[-1]})")
     
     # Check if model_type is a momentum strategy or meta-strategy
-    momentum_strategies = ['bb_rsi_adx', 'tema', 'quod', 'jfk_dsrsi', 'mpo_3tf', 'meta_strategy']
+    momentum_strategies = ['bb_rsi_adx', 'tema', 'quod', 'jfk_dsrsi', 'mpo_3tf', 
+                           'jfk_dsrsi_full', 'mpo_3tf_full', 'meta_strategy']
     
     if model_type in momentum_strategies:
         # For momentum strategies, use the model type as the strategy type
@@ -1006,7 +1008,7 @@ def parse_arguments():
     
     parser.add_argument('--model', type=str,
                         choices=['decision_tree', 'random_forest', 'xgboost', 'stacking', 'transformer', 'hybrid',
-                                 'bb_rsi_adx', 'tema', 'quod', 'jfk_dsrsi', 'mpo_3tf', 'meta_strategy', 'hybrid_momentum'],
+                                 'bb_rsi_adx', 'tema', 'quod', 'jfk_dsrsi', 'mpo_3tf', 'jfk_dsrsi_full', 'mpo_3tf_full', 'meta_strategy', 'hybrid_momentum'],
                         default='random_forest',
                         help='Model type for single mode (default: random_forest)')
     

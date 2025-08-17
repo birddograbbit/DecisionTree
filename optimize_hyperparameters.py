@@ -127,23 +127,26 @@ def prepare_features_and_target(df, lookback_period=None):
     # Calculate features
     features = []
     
-    # Price-based features
-    df['ma20'] = df['close'].rolling(20).mean()
-    df['ma50'] = df['close'].rolling(50).mean()
-    df['ma200'] = df['close'].rolling(200).mean()
+    # Price-based features with min_periods to avoid NaN
+    df['ma20'] = df['close'].rolling(20, min_periods=1).mean()
+    df['ma50'] = df['close'].rolling(50, min_periods=1).mean()
+    df['ma200'] = df['close'].rolling(200, min_periods=1).mean()
     
     features.extend(['ma20', 'ma50', 'ma200'])
     
-    # Moving average ratios
-    df['ma_ratio_20_50'] = df['ma20'] / df['ma50']
-    df['ma_ratio_20_200'] = df['ma20'] / df['ma200']
-    df['ma_ratio_50_200'] = df['ma50'] / df['ma200']
+    # Moving average ratios with protection against division by zero
+    df['ma_ratio_20_50'] = df['ma20'] / df['ma50'].replace(0, np.nan)
+    df['ma_ratio_20_200'] = df['ma20'] / df['ma200'].replace(0, np.nan)
+    df['ma_ratio_50_200'] = df['ma50'] / df['ma200'].replace(0, np.nan)
+    
+    # Replace infinity values with NaN
+    df[['ma_ratio_20_50', 'ma_ratio_20_200', 'ma_ratio_50_200']] = df[['ma_ratio_20_50', 'ma_ratio_20_200', 'ma_ratio_50_200']].replace([np.inf, -np.inf], np.nan)
     
     features.extend(['ma_ratio_20_50', 'ma_ratio_20_200', 'ma_ratio_50_200'])
     
-    # Volatility indicators
-    df['std20'] = df['return'].rolling(20).std()
-    df['std50'] = df['return'].rolling(50).std()
+    # Volatility indicators with min_periods
+    df['std20'] = df['return'].rolling(20, min_periods=2).std()
+    df['std50'] = df['return'].rolling(50, min_periods=2).std()
     
     features.extend(['std20', 'std50'])
     
@@ -156,8 +159,9 @@ def prepare_features_and_target(df, lookback_period=None):
     # Volume-based features if volume column exists
     if 'volume' in df.columns:
         df['vol_change'] = df['volume'].pct_change()
-        df['vol_ma20'] = df['volume'].rolling(20).mean()
-        df['vol_ratio'] = df['volume'] / df['vol_ma20']
+        df['vol_ma20'] = df['volume'].rolling(20, min_periods=1).mean()
+        df['vol_ratio'] = df['volume'] / df['vol_ma20'].replace(0, np.nan)
+        df['vol_ratio'] = df['vol_ratio'].replace([np.inf, -np.inf], np.nan)
         
         features.extend(['vol_change', 'vol_ma20', 'vol_ratio'])
     

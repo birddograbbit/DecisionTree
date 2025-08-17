@@ -91,13 +91,12 @@ class ModelFactory:
             logger.info(f"Using optimized hyperparameters for {model_type}")
             
         if model_type == 'decision_tree':
-            calibrate = params.pop('calibrate', True)  # Changed default to True
-            # Fix: Remove class_weight parameter if it exists as Decision Tree model doesn't support it
-            params.pop('class_weight', None)
+            calibrate = params.pop('calibrate', False)  # Disable calibration by default for intraday
+            # DecisionTree does support class_weight parameter - keep it
             return DecisionTreeModel(calibrate=calibrate, **params)
         
         elif model_type == 'random_forest':
-            calibrate = params.pop('calibrate', True)  # Changed default to True
+            calibrate = params.pop('calibrate', False)  # Disable calibration by default for intraday
             return RandomForestModel(calibrate=calibrate, **params)
         
         elif model_type == 'xgboost':
@@ -244,26 +243,26 @@ class ModelFactory:
         """
         if model_type == 'decision_tree':
             return {
-                'calibrate': True,  # Changed from False
-                'max_depth': 5,
-                'min_samples_split': 2,
-                'min_samples_leaf': 1,
+                'calibrate': False,  # Disable calibration by default for intraday
+                'max_depth': 12,  # Increased from 5 for better intraday patterns
+                'min_samples_split': 20,
+                'min_samples_leaf': 5,  # Increased to reduce overfitting
                 'max_features': None,
                 'criterion': 'gini',
-                # Fix: Remove class_weight from default params for decision tree
+                'class_weight': 'balanced',  # Add class weight for better balance
                 'random_state': 42
             }
         
         elif model_type == 'random_forest':
             return {
-                'calibrate': True,  # Changed from False
-                'n_estimators': 100,
-                'max_depth': 5,
-                'min_samples_split': 2,
-                'min_samples_leaf': 1,
+                'calibrate': False,  # Disable calibration by default for intraday
+                'n_estimators': 300,  # Increased for better stability
+                'max_depth': 12,  # Increased from 5 for better patterns
+                'min_samples_split': 10,
+                'min_samples_leaf': 5,  # Increased from 1 to reduce overfitting
                 'max_features': 'sqrt',
                 'criterion': 'gini',
-                'class_weight': 'balanced',  # Added class weight
+                'class_weight': 'balanced_subsample',  # Better for RF
                 'random_state': 42,
                 'n_jobs': -1
             }

@@ -440,7 +440,10 @@ DECISION_TREE_1MIN_CONFIG = {
     'name': 'Decision Tree (1min)',
     'model_type': 'decision_tree',
     'model_params': {
-        'max_depth': 3,
+        'max_depth': 12,  # Increased from 3 for better patterns
+        'min_samples_leaf': 5,
+        'min_samples_split': 20,
+        'class_weight': 'balanced',
         'calibrate': False
     },
     'position_sizing': 'fixed',
@@ -455,9 +458,11 @@ RANDOM_FOREST_1MIN_CONFIG = {
     'name': 'Random Forest (1min)',
     'model_type': 'random_forest',
     'model_params': {
-        'n_estimators': 50,
-        'max_depth': 3,
-        'min_samples_split': 20,
+        'n_estimators': 300,  # Increased from 50 for better stability
+        'max_depth': 12,  # Increased from 3
+        'min_samples_leaf': 5,
+        'min_samples_split': 10,
+        'class_weight': 'balanced_subsample',
         'calibrate': False
     },
     'position_sizing': 'fixed',

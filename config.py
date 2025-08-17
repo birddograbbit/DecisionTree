@@ -31,9 +31,9 @@ BUY_THRESHOLD = 0.51  # Reduced from 0.55 to 0.51 for narrow probability ranges
 SELL_THRESHOLD = 0.49  # Increased from 0.45 to 0.49 for narrow probability ranges
 
 # Adaptive threshold defaults
-USE_ADAPTIVE_THRESHOLDS = 'auto'  # Changed from 'always' to 'auto'
-BUY_PERCENTILE = 65  # Reduced from 70 to 65
-SELL_PERCENTILE = 35  # Increased from 30 to 35
+USE_ADAPTIVE_THRESHOLDS = 'always'  # Use adaptive for intraday
+BUY_PERCENTILE = 80  # Increased to target upper tail for intraday
+SELL_PERCENTILE = 20  # Decreased to target lower tail for intraday
 
 # Risk management settings
 MAX_POSITION_SIZE = 0.05  # Maximum position size as fraction of total capital

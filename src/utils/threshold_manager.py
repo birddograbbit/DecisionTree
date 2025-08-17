@@ -77,18 +77,20 @@ class ThresholdManager:
         should_use_adaptive = self._should_use_adaptive_thresholds(predictions)
         
         if should_use_adaptive and predictions is not None:
-            pred_std = np.std(predictions)
-            if pred_std < 0.02:
-                med = np.median(predictions)
-                mad = np.median(np.abs(predictions - med))
-                if mad > 0:
-                    z_scores = (predictions - med) / mad
-                    buy_idx = np.where(z_scores > 1.0)[0]
-                    sell_idx = np.where(z_scores < -1.0)[0]
-                    if len(buy_idx) > 0 and len(sell_idx) > 0:
-                        return predictions[buy_idx].min(), predictions[sell_idx].max()
-                return 0.52, 0.48
-            return self._calculate_adaptive_thresholds(predictions)
+            # Use percentile-based thresholds that guarantee trades
+            buy, sell = self._calculate_adaptive_thresholds(predictions)
+            
+            # Ensure thresholds are within the observed range
+            eps = 1e-6
+            buy = min(buy, float(np.max(predictions)) - eps)
+            sell = max(sell, float(np.min(predictions)) + eps)
+            
+            # If thresholds are inverted, use direct percentiles
+            if buy <= sell:
+                buy = float(np.percentile(predictions, self.config.get('buy_percentile', DEFAULT_BUY_PERCENTILE)))
+                sell = float(np.percentile(predictions, self.config.get('sell_percentile', DEFAULT_SELL_PERCENTILE)))
+            
+            return buy, sell
         else:
             return self.buy_threshold, self.sell_threshold
     

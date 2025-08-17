@@ -169,9 +169,15 @@ def add_technical_indicators(df, lookback_period=10):
     result['price_momentum_5d'] = result['close'] / result['close'].shift(5) - 1
     result['price_momentum_10d'] = result['close'] / result['close'].shift(10) - 1
 
-    # Volume momentum (volume vs. previous periods)
-    result['volume_momentum_1d'] = result['volume'] / result['volume'].shift(1) - 1
-    result['volume_momentum_5d'] = result['volume'] / result['volume'].shift(5) - 1
+    # Volume momentum (volume vs. previous periods) - only if volume is valid
+    has_valid_volume = 'volume' in result.columns and result['volume'].sum() > 0
+    if has_valid_volume:
+        result['volume_momentum_1d'] = result['volume'] / result['volume'].shift(1) - 1
+        result['volume_momentum_5d'] = result['volume'] / result['volume'].shift(5) - 1
+    else:
+        # For index data without volume, use placeholder values
+        result['volume_momentum_1d'] = 0.0
+        result['volume_momentum_5d'] = 0.0
     
     # New momentum-volatility hybrid features
     # ADX (Average Directional Index)
@@ -230,11 +236,18 @@ def engineer_features(df, lookback_period=10, timeframe: str = 'daily'):
     # Base feature set used for all timeframes
     features = [
         'sma_ratio', 'rsi', 'std', 'bb_position',
-        'price_momentum_5d', 'volume_momentum_1d',
+        'price_momentum_5d',
         'macd', 'stoch_k', 'atr',
         'adx', 'adx_momentum', 'atr_zscore',
         'plus_di', 'minus_di'
     ]
+    
+    # Only include volume features if volume data is valid
+    has_valid_volume = 'volume' in df_features.columns and df_features['volume'].sum() > 0
+    if has_valid_volume and 'volume_momentum_1d' in df_features.columns:
+        # Only add if not all NaN
+        if not df_features['volume_momentum_1d'].isna().all():
+            features.append('volume_momentum_1d')
 
     if timeframe in ['5min', '1min']:
         df_features = add_intraday_features(df_features, timeframe)

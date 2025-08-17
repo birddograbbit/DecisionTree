@@ -490,11 +490,18 @@ def run_strategy_comparison(data_path, output_dir='results_comparison',
         plt.figure(figsize=(12, 8))
 
         # Add buy and hold equity curve for reference
-        buy_hold = (test_data['close'] / test_data['close'].iloc[0])
-        plt.plot(buy_hold.index, buy_hold, label='Buy & Hold', linestyle='--')
+        if len(test_data) > 0:
+            buy_hold = (test_data['close'] / test_data['close'].iloc[0])
+            plt.plot(buy_hold.index, buy_hold, label='Buy & Hold', linestyle='--')
+        else:
+            print("Warning: No test data available for buy & hold comparison")
 
         # Plot strategy equity curves
         for name, equity in equity_curves:
+            # Skip empty equity curves
+            if len(equity) == 0:
+                print(f"Warning: Empty equity curve for {name}, skipping plot")
+                continue
             # Normalize to start at 1.0
             normalized_equity = equity / equity.iloc[0]
             plt.plot(equity.index, normalized_equity, label=name)

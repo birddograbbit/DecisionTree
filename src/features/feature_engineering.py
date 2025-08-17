@@ -101,7 +101,10 @@ def add_intraday_features(df, timeframe='5min'):
     df['volatility_5'] = df['close'].pct_change().rolling(5).std()
     df['volatility_15'] = df['close'].pct_change().rolling(15).std()
     df['rsi_7'] = calculate_rsi(df, window=7)
-    df['vwap_distance'] = (df['close'] - df['vwap']) / df['vwap']
+    # Calculate vwap_distance only if vwap exists and is non-zero
+    if 'vwap' in df.columns and df['vwap'].notna().any() and (df['vwap'] != 0).any():
+        df['vwap_distance'] = (df['close'] - df['vwap']) / df['vwap'].replace(0, np.nan)
+        df['vwap_distance'] = df['vwap_distance'].fillna(0)
     df['ret_1bar'] = df['close'].pct_change(1)
     df['ret_3bar'] = df['close'].pct_change(3)
     df['ret_6bar'] = df['close'].pct_change(6)
@@ -126,16 +129,18 @@ def add_technical_indicators(df, lookback_period=10):
     # Make a copy to avoid modifying the original
     result = df.copy()
     
+    logger.info(f"add_technical_indicators - Input shape: {result.shape}, lookback: {lookback_period}")
+    
     # Price-based indicators
     result['returns'] = result['close'].pct_change(1)
     result['log_returns'] = np.log(result['close'] / result['close'].shift(1))
     
-    # Moving averages
-    result['sma'] = result['close'].rolling(window=lookback_period).mean()
-    result['ema'] = result['close'].ewm(span=lookback_period).mean()
+    # Moving averages - use min_periods to avoid losing too much data
+    result['sma'] = result['close'].rolling(window=lookback_period, min_periods=min(lookback_period//2, 5)).mean()
+    result['ema'] = result['close'].ewm(span=lookback_period, adjust=False).mean()
     
-    # Volatility
-    result['std'] = result['returns'].rolling(window=lookback_period).std()
+    # Volatility - use min_periods to avoid losing too much data
+    result['std'] = result['returns'].rolling(window=lookback_period, min_periods=min(lookback_period//2, 5)).std()
     
     # Momentum
     result['rsi'] = calculate_rsi(result, window=lookback_period)
@@ -178,8 +183,22 @@ def add_technical_indicators(df, lookback_period=10):
     # ATR Z-Score
     result['atr_zscore'] = calculate_atr_zscore(result, atr_window=lookback_period, zscore_window=60)
     
-    # Drop NaN values introduced by indicators
-    result = result.dropna()
+    # Log shape before dropna
+    logger.info(f"add_technical_indicators - Before dropna: {result.shape}, NaN count per column:")
+    nan_counts = result.isna().sum()
+    for col, count in nan_counts[nan_counts > 0].items():
+        logger.info(f"  {col}: {count} NaNs")
+    
+    # Drop NaN values introduced by indicators - but keep more data
+    # For 1-minute data with lookback=60, we want to keep as much as possible
+    if lookback_period >= 60:
+        # For large lookback periods, only drop rows where critical features are NaN
+        critical_cols = ['returns', 'sma', 'rsi', 'std']
+        result = result.dropna(subset=critical_cols)
+    else:
+        result = result.dropna()
+    
+    logger.info(f"add_technical_indicators - After dropna: {result.shape}")
     
     return result
 
@@ -199,8 +218,11 @@ def engineer_features(df, lookback_period=10, timeframe: str = 'daily'):
     tuple
         (X: feature matrix, y: target values, dates: corresponding dates)
     """
+    logger.info(f"Starting feature engineering - Input shape: {df.shape}, lookback: {lookback_period}, timeframe: {timeframe}")
+    
     # Add technical indicators
     df_indicators = add_technical_indicators(df, lookback_period)
+    logger.info(f"After technical indicators: {df_indicators.shape}")
 
     # Make a copy to avoid warnings
     df_features = df_indicators.copy()
@@ -216,17 +238,27 @@ def engineer_features(df, lookback_period=10, timeframe: str = 'daily'):
 
     if timeframe in ['5min', '1min']:
         df_features = add_intraday_features(df_features, timeframe)
-        features.extend([
+        intraday_features = [
             'hour', 'minute', 'minutes_from_open', 'minutes_to_close',
             'is_first_30m', 'is_power_hour', 'volatility_5', 'volatility_15',
-            'rsi_7', 'vwap_distance', 'ret_1bar', 'ret_3bar', 'ret_6bar'
-        ])
+            'rsi_7', 'ret_1bar', 'ret_3bar', 'ret_6bar'
+        ]
+        # Only include vwap_distance if it exists
+        if 'vwap_distance' in df_features.columns:
+            intraday_features.append('vwap_distance')
+        features.extend(intraday_features)
 
     df_features.replace([np.inf, -np.inf], np.nan, inplace=True)
+    logger.info(f"Before dropna: {df_features.shape}, NaN counts: {df_features.isna().sum().sum()}")
     df_features.dropna(inplace=True)
+    logger.info(f"After dropna: {df_features.shape}")
 
-    # Extract features
-    X = df_features[features]
+    # Extract features - only use features that exist
+    available_features = [f for f in features if f in df_features.columns]
+    if len(available_features) < len(features):
+        missing = set(features) - set(available_features)
+        logger.warning(f"Missing features: {missing}")
+    X = df_features[available_features]
     
     # Create target (1 if next day's close > current close, 0 otherwise)
     # The target should be shifted FORWARD (future data)
@@ -238,6 +270,8 @@ def engineer_features(df, lookback_period=10, timeframe: str = 'daily'):
     
     # Extract dates for reference
     dates = X.index
+    
+    logger.info(f"Final feature matrix shape: {X.shape}")
     
     return X, y, dates
 

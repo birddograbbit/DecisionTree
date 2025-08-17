@@ -132,6 +132,13 @@ class DecisionTreeModel(BaseModel):
         np.ndarray
             Predicted probabilities for positive class (class 1)
         """
+        if self._clf is None:
+            raise ValueError("Model has not been trained yet. Call train() first.")
+        
+        # Check if the model has predict_proba method
+        if not hasattr(self._clf, 'predict_proba'):
+            raise ValueError("Model does not have predict_proba method after training.")
+        
         return self._clf.predict_proba(X)[:, 1]  # Probability of positive class
 
     def get_feature_importance(self):

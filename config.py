@@ -16,7 +16,7 @@ DATA_TEST_END_DATE = '20240510'  # Testing data end date
 # Model settings
 LOOKBACK_PERIOD = 10  # Number of days to look back for feature creation
 LOOKBACK_PERIOD_5MIN = 78  # Number of 5-minute bars to look back (1 trading day)
-LOOKBACK_PERIOD_1MIN = 390  # Number of 1-minute bars to look back (1 trading day)
+LOOKBACK_PERIOD_1MIN = 60  # Number of 1-minute bars to look back (1 hour)
 # Note: FEATURE_COUNT removed as it was unused. Feature selection is now handled
 # through the feature auditing and pruning system in feature_engineering.py
 

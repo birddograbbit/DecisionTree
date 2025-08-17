@@ -35,6 +35,7 @@ class ModelEngine:
         self.model_params = model_params or {}
         self.feature_names = None
         self.metrics = {}
+        self.is_trained = False  # Initialize training status
         
         # Use provided model or create one
         if model_object is not None:
@@ -78,6 +79,14 @@ class ModelEngine:
         X_array = X.values if hasattr(X, 'values') else X
         y_array = y.values if hasattr(y, 'values') else y
         
+        # Check for minimum samples
+        if len(X_array) < 100:
+            print(f"WARNING: Insufficient training samples ({len(X_array)}). Skipping model training.")
+            self.is_trained = False  # Mark as not trained
+            return self
+        
+        self.is_trained = True  # Mark as trained
+        
         # Perform hyperparameter optimization if requested
         if perform_hpo and hpo_param_grid is not None:
             self._perform_hpo(X_array, y_array, hpo_param_grid, hpo_cv, hpo_scoring)
@@ -110,6 +119,10 @@ class ModelEngine:
         np.ndarray
             Predicted probabilities
         """
+        # Check if model is trained
+        if hasattr(self, 'is_trained') and not self.is_trained:
+            raise ValueError("Model has not been trained successfully. Cannot make predictions.")
+        
         # Convert to numpy array if needed
         X_array = X.values if hasattr(X, 'values') else X
         

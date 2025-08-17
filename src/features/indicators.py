@@ -123,8 +123,18 @@ def calculate_vwap(df):
     # Calculate typical price
     typical_price = (df['high'] + df['low'] + df['close']) / 3
     
-    # Calculate VWAP
-    vwap = (typical_price * df['volume']).cumsum() / df['volume'].cumsum()
+    # Check if volume is all zeros (common for indices like SPX)
+    if df['volume'].sum() == 0:
+        # For zero-volume assets, return EMA of typical price as fallback
+        return typical_price.ewm(span=20, adjust=False).mean()
+    
+    # Calculate VWAP normally
+    cumulative_volume = df['volume'].cumsum()
+    # Avoid division by zero
+    cumulative_volume = cumulative_volume.replace(0, np.nan)
+    vwap = (typical_price * df['volume']).cumsum() / cumulative_volume
+    # Fill NaN values with typical price
+    vwap = vwap.fillna(typical_price)
     
     return vwap
 

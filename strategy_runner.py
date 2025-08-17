@@ -611,7 +611,14 @@ def get_strategy_configs(use_optimized_params=False, include_momentum=False, tim
         List of strategy configurations
     """
     # Use predefined strategy configurations from strategy_configs.py
-    if timeframe in ['5min', '1min']:
+    if timeframe == '1min':
+        strategy_configs = [
+            STRATEGY_CONFIGS['decision_tree_1min'].copy(),
+            STRATEGY_CONFIGS['random_forest_1min'].copy(),
+            STRATEGY_CONFIGS['xgboost_1min'].copy(),
+            STRATEGY_CONFIGS['transformer_1min'].copy(),
+        ]
+    elif timeframe == '5min':
         strategy_configs = [
             STRATEGY_CONFIGS['decision_tree_5min'].copy(),
             STRATEGY_CONFIGS['random_forest_5min'].copy(),
@@ -765,11 +772,24 @@ def run_single_strategy(data_path, model_type='random_forest', output_dir='resul
             else:
                 config_key = 'random_forest_calibrated' if calibrate else 'random_forest'
         elif model_type == 'xgboost':
-            config_key = 'xgboost_5min' if timeframe in ['5min', '1min'] else 'xgboost_confidence'
+            if timeframe == '1min':
+                config_key = 'xgboost_1min'
+            elif timeframe == '5min':
+                config_key = 'xgboost_5min'
+            else:
+                config_key = 'xgboost_confidence'
         elif model_type == 'stacking':
             config_key = 'stacking'
         elif model_type in ['transformer', 'hybrid']:
-            config_key = 'transformer_5min' if (model_type == 'transformer' and timeframe in ['5min', '1min']) else None
+            if model_type == 'transformer':
+                if timeframe == '1min':
+                    config_key = 'transformer_1min'
+                elif timeframe == '5min':
+                    config_key = 'transformer_5min'
+                else:
+                    config_key = None
+            else:
+                config_key = None
         
         if strategy_type == 'regime_adaptive' and model_type == 'random_forest':
             config_key = 'regime_adaptive_rf'

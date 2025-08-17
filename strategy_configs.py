@@ -435,6 +435,69 @@ HYBRID_XGB_MPO_5MIN_CONFIG = {
     'timeframe': '5min'
 }
 
+# 1-Minute ML Strategy Configurations
+DECISION_TREE_1MIN_CONFIG = {
+    'name': 'Decision Tree (1min)',
+    'model_type': 'decision_tree',
+    'model_params': {
+        'max_depth': 3,
+        'calibrate': False
+    },
+    'position_sizing': 'fixed',
+    'consecutive_buys': False,
+    'min_holding_days': 0,
+    'use_adaptive_thresholds': 'auto',
+    'buy_percentile': 65,
+    'sell_percentile': 35
+}
+
+RANDOM_FOREST_1MIN_CONFIG = {
+    'name': 'Random Forest (1min)',
+    'model_type': 'random_forest',
+    'model_params': {
+        'n_estimators': 50,
+        'max_depth': 3,
+        'min_samples_split': 20,
+        'calibrate': False
+    },
+    'position_sizing': 'fixed',
+    'consecutive_buys': False,
+    'min_holding_days': 0,
+    'use_adaptive_thresholds': 'auto',
+    'buy_percentile': 65,
+    'sell_percentile': 35
+}
+
+XGBOOST_1MIN_CONFIG = {
+    'name': 'XGBoost (1min)',
+    'model_type': 'xgboost',
+    'model_params': {
+        'n_estimators': 50,
+        'max_depth': 3,
+        'learning_rate': 0.1,
+        'subsample': 0.8,
+        'use_focal_loss': False
+    },
+    'position_sizing': 'fixed',
+    'consecutive_buys': False,
+    'min_holding_days': 0,
+    'use_adaptive_thresholds': 'auto',
+    'buy_percentile': 65,
+    'sell_percentile': 35
+}
+
+TRANSFORMER_1MIN_CONFIG = {
+    'name': 'Transformer (1min)',
+    'model_type': 'transformer',
+    'model_params': config.TRANSFORMER_CONFIG.get('1min', config.TRANSFORMER_CONFIG['5min']),
+    'position_sizing': 'fixed',
+    'consecutive_buys': False,
+    'min_holding_days': 0,
+    'use_adaptive_thresholds': 'auto',
+    'buy_percentile': 65,
+    'sell_percentile': 35
+}
+
 # All strategy configurations
 STRATEGY_CONFIGS = {
     'decision_tree': DECISION_TREE_CONFIG,
@@ -447,6 +510,10 @@ STRATEGY_CONFIGS = {
     'random_forest_5min': RANDOM_FOREST_5MIN_CONFIG,
     'xgboost_5min': XGBOOST_5MIN_CONFIG,
     'transformer_5min': TRANSFORMER_5MIN_CONFIG,
+    'decision_tree_1min': DECISION_TREE_1MIN_CONFIG,
+    'random_forest_1min': RANDOM_FOREST_1MIN_CONFIG,
+    'xgboost_1min': XGBOOST_1MIN_CONFIG,
+    'transformer_1min': TRANSFORMER_1MIN_CONFIG,
     'stacking': STACKING_CONFIG,
     'regime_adaptive_rf': REGIME_ADAPTIVE_RF_CONFIG,
     'transformer': {

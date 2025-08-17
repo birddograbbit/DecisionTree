@@ -200,6 +200,14 @@ def run_feature_audit(data_path, output_dir, model_type='random_forest',
     dates_train = dates[:train_size]
     dates_test = dates[train_size:]
     
+    # Check for sufficient samples before scaling
+    if len(X_train) == 0 or len(X_test) == 0:
+        print(f"WARNING: Insufficient samples for feature audit (train: {len(X_train)}, test: {len(X_test)})")
+        return ([], {}) if audit_only else (pd.DataFrame(), pd.DataFrame(), pd.Series(), pd.Series(), {})
+    
+    if len(X_train) < 20:
+        print(f"WARNING: Very few training samples ({len(X_train)}). Feature importance may be unreliable.")
+    
     # Scale features
     from sklearn.preprocessing import StandardScaler
     scaler = StandardScaler()

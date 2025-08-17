@@ -173,8 +173,8 @@ class TrendFollowingStrategy(BaseStrategy):
                                hpo_cv=self.config.get('hpo_cv', 3),
                                hpo_scoring=self.config.get('hpo_scoring', 'roc_auc'))
         
-        # Mark as trained
-        self.is_trained = True
+        # Sync training status with model engine
+        self.is_trained = getattr(self.model_engine, 'is_trained', True)
         
         return self
 
@@ -267,6 +267,24 @@ class TrendFollowingStrategy(BaseStrategy):
         
         # Train model
         self.train(train_data)
+        
+        # Check if training was successful
+        if not self.is_trained:
+            print(f"WARNING: Model training failed for {self.config.get('name', 'strategy')}. Skipping backtest.")
+            return {
+                'performance': {
+                    'total_return': 0.0,
+                    'ann_return': 0.0,
+                    'ann_volatility': 0.0,
+                    'sharpe_ratio': 0.0,
+                    'max_drawdown': 0.0,
+                    'win_rate': 0.0,
+                    'profit_factor': 0.0,
+                    'total_trades': 0
+                },
+                'trades': pd.DataFrame(),
+                'equity_curve': {'equity': pd.Series(dtype=float)}
+            }
         
         # Generate signals
         signals, predictions = self.predict(test_data)

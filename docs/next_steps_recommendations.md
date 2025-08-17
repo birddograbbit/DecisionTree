@@ -120,6 +120,73 @@ python strategy_runner.py --data data/raw --model meta_strategy --mode single --
 - Registry-based performance statistics
 - Foundation for regime-based selection
 
+## JFK_DSRSI and MPO-3TF Strategy Implementation Options (August 17, 2025)
+
+After integrating optimized parameters from Optuna hyperparameter optimization, both JFK_DSRSI and MPO-3TF strategies show poor performance (-80% to -99% returns). Analysis reveals that while parameters are correctly integrated, the core signal generation logic differs significantly from the reference implementations. Three options are available:
+
+### Option A: Use Full Reference Implementations (RECOMMENDED)
+**Approach**: Port the complete reference implementations from `reference/jfk_dsrsi/` and `reference/MPO-3TF/`
+
+**Advantages**:
+- Exact logic that was optimized with Optuna
+- Proven performance with the optimized parameters
+- Complex indicators properly implemented (Jurik filtering, PST, MPO calculations)
+
+**Implementation Steps**:
+1. Copy core logic from reference implementations
+2. Adapt to work with BaseStrategy adapter pattern
+3. Preserve all complex calculations (Jurik filter, Phase Shift Transform, MPO indicators)
+4. Maintain exact entry/exit conditions including "arming" logic
+
+**Challenges**:
+- Complex implementation requiring careful porting
+- May need additional indicator calculations
+- Performance overhead from complex computations
+
+### Option B: Simplify Strategy Logic
+**Approach**: Focus on core concepts without full complexity
+
+**Advantages**:
+- Easier to implement and maintain
+- Faster execution
+- Clearer logic for debugging
+
+**Implementation Steps**:
+1. Use optimized thresholds with simplified entry/exit logic
+2. Replace complex indicators with approximations
+3. Test and iterate to find profitable simplifications
+
+**Challenges**:
+- May not achieve the same performance as optimized versions
+- Requires experimentation to find working simplifications
+
+### Option C: Hybrid Meta-Strategy Approach
+**Approach**: Use these as part of meta-strategy framework
+
+**Advantages**:
+- Leverages proven strategies (Quod with 1.53 Sharpe)
+- Reduces dependency on complex implementations
+- Risk diversification through strategy rotation
+
+**Implementation Steps**:
+1. Keep current simplified versions
+2. Include in meta-strategy rotation
+3. Let performance-based selection handle strategy switching
+4. Focus optimization efforts on other strategies
+
+**Challenges**:
+- Doesn't fully utilize the optimization work
+- May miss potential alpha from properly implemented strategies
+
+### Current Implementation Status (August 17, 2025)
+- **Parameters Integrated**: All optimized parameters added to adapters ✅
+- **Basic Logic Implemented**: Simplified versions of strategies created ✅
+- **Performance Issues**: Strategies showing significant losses ❌
+- **Root Cause**: Signal generation logic differs from reference implementations
+
+### Decision: Proceeding with Option A
+Based on the significant effort invested in hyperparameter optimization and the potential for superior performance, we will proceed with Option A - implementing the full reference logic.
+
 ## Recommended Next Steps (Priority Order)
 
 ### 1. Test and Optimize Meta-Strategy (IMMEDIATE PRIORITY)

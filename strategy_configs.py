@@ -296,22 +296,46 @@ QUOD_CONFIG = {
     'allow_same_bar_exit': True
 }
 
-# JFK-DSRSI Strategy
+# JFK-DSRSI Strategy (Optimized for 5min SPX)
 JFK_DSRSI_CONFIG = {
     'name': 'JFK-DSRSI',
     'model_type': 'jfk_dsrsi',
     'symbol': 'SPY',
     'position_size': 0.1,
     'timeframe': '5min',
-    'dsrsi_length': 14,
-    'smoothing_period': 3,
-    'kps_length': 14,
-    'kps_smooth': 3,
-    'rsi_long_threshold': 60,
-    'rsi_short_threshold': 40,
-    'atr_length': 14,
-    'atr_stop_loss': 3,
-    'atr_take_profit': 3,
+    # Core DSRSI parameters (Optimized)
+    'dsrsi_length': 30,
+    'smoothing_period': 2,
+    'source': 'open',
+    'use_dsrsi': False,
+    'volume_weighted': False,
+    # KPS parameters (Optimized)
+    'kps_length': 14,  # Keep default
+    'kps_smooth_period': 8,
+    'kps_long_exit_threshold': 84,
+    'kps_short_exit_threshold': 5,
+    # PST parameters (Optimized)
+    'pst_length': 17,
+    'pst_smooth': 6,
+    'pst_x': 3,
+    'jphase': 78.91,
+    # Entry/Exit parameters (Optimized)
+    'rsi_long_threshold': 60,  # Keep default
+    'rsi_short_threshold': 40,  # Keep default
+    'exit_at_opposite_signal': True,
+    # Risk management (Optimized)
+    'atr_length': 18,
+    'use_sl': True,
+    'use_tp': False,
+    'use_ts': True,
+    'sl_atr_ratio': 2.62,
+    'tp_sl_ratio': 1.77,
+    # Trailing stop (Optimized)
+    'ts_method': 'ATR',
+    'ts_atr_multiplier': 0.54,
+    'ts_percent': 3.34,
+    'ts_source': 'Open',
+    'ts_swing_lookback': 15,
 }
 
 JFK_DSRSI_1MIN_CONFIG = {
@@ -322,24 +346,66 @@ JFK_DSRSI_1MIN_CONFIG = {
 
 JFK_DSRSI_SPX_CONFIG = {
     **JFK_DSRSI_CONFIG,
-    'name': 'JFK-DSRSI SPX',
+    'name': 'JFK-DSRSI SPX (Optimized)',
     'symbol': 'SPX',
-    'asset_type': 'INDEX'
+    'asset_type': 'INDEX',
+    'timeframe': '5min',
+    # Override with SPX-specific optimized parameters
+    'atr_length': 18,
+    'dsrsi_length': 30,
+    'exit_at_opposite_signal': True,
+    'jphase': 78.91,
+    'kps_long_exit_threshold': 84,
+    'kps_short_exit_threshold': 5,
+    'kps_smooth_period': 8,
+    'pst_length': 17,
+    'pst_smooth': 6,
+    'pst_x': 3,
+    'sl_atr_ratio': 2.62,
+    'smoothing_period': 2,
+    'source': 'open',
+    'tp_sl_ratio': 1.77,
+    'ts_atr_multiplier': 0.54,
+    'ts_method': 'ATR',
+    'ts_percent': 3.34,
+    'ts_source': 'Open',
+    'ts_swing_lookback': 15,
+    'use_dsrsi': False,
+    'use_sl': True,
+    'use_tp': False,
+    'use_ts': True,
+    'volume_weighted': False
 }
 
-# MPO-3TF Strategy
+# MPO-3TF Strategy (Optimized for 1min SPX)
 MPO_3TF_CONFIG = {
     'name': 'MPO-3TF',
     'model_type': 'mpo_3tf',
     'symbol': 'SPY',
     'position_size': 0.1,
     'timeframe': '1min',
+    # Entry control (Optimized)
+    'use_entry1': True,
+    'use_entry2': True,
+    'entry2_min_lm': 1,
+    # RSI parameters
     'rsi_period': 14,
-    'rsi_upper': 60,
-    'rsi_lower': 40,
+    # Multi-timeframe thresholds (Optimized)
+    'ob1': 93.15,
+    'ob2': 60.64,
+    'ob3': 64.15,
+    'os1': 38.76,
+    'os2': 32.63,
+    'os3': 53.44,
+    # MBRSI gate (Optimized)
+    'use_mbrsi_gate': False,
+    'mbrsi_thresh': 47.16,
+    # Risk management (Optimized)
     'atr_length': 14,
-    'atr_stop_loss': 3,
-    'atr_take_profit': 3,
+    'sl_mult': 0.50,
+    'tp_mult': 4.31,
+    # Warmup period (Optimized)
+    'min_bars_warmup': 49,
 }
 
 MPO_3TF_5MIN_CONFIG = {
@@ -350,9 +416,25 @@ MPO_3TF_5MIN_CONFIG = {
 
 MPO_3TF_SPX_CONFIG = {
     **MPO_3TF_CONFIG,
-    'name': 'MPO-3TF SPX',
+    'name': 'MPO-3TF SPX (Optimized)',
     'symbol': 'SPX',
-    'asset_type': 'INDEX'
+    'asset_type': 'INDEX',
+    'timeframe': '1min',
+    # Override with SPX-specific optimized parameters
+    'use_entry1': True,
+    'use_entry2': True,
+    'entry2_min_lm': 1,
+    'ob1': 93.15,
+    'ob2': 60.64,
+    'ob3': 64.15,
+    'os1': 38.76,
+    'os2': 32.63,
+    'os3': 53.44,
+    'use_mbrsi_gate': False,
+    'mbrsi_thresh': 47.16,
+    'sl_mult': 0.50,
+    'tp_mult': 4.31,
+    'min_bars_warmup': 49
 }
 
 # 5-Minute Strategy Configurations

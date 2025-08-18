@@ -80,3 +80,35 @@ To analyse multiple symbols or timeframes, run the script in a loop or separate 
 The transformer model now exposes an sklearn-compatible interface. Cross-validation
 works through the `ModelEngine`, but training remains CPU-intensive on macOS.
 
+## 10. Advanced Strategy Execution
+
+### JFK-DSRSI on 5-minute SPX data
+```bash
+python strategy_runner.py \
+  --data data/raw \
+  --model jfk_dsrsi_full \
+  --mode single \
+  --output results/jfk_dsrsi_5min \
+  --timeframe 5min
+```
+
+### MPO-3TF on 1-minute SPX data
+```bash
+python strategy_runner.py \
+  --data data/raw \
+  --model mpo_3tf_full \
+  --mode single \
+  --output results/mpo_3tf_1min \
+  --timeframe 1min
+```
+
+### Compare both strategies
+```bash
+python strategy_runner.py \
+  --data data/raw \
+  --mode compare \
+  --include-momentum \
+  --output results/momentum_comparison \
+  --timeframe 5min
+```
+

@@ -69,6 +69,7 @@ class MPO3TFFullAdapter(BaseStrategy):
         # Warmup and position sizing
         self.min_bars_warmup = 49
         self.position_size = 0.1
+        self.diagnostics = False
         
         # Multi-timeframe aggregator
         self.aggregator = MultiTimeframeAggregator()
@@ -90,7 +91,8 @@ class MPO3TFFullAdapter(BaseStrategy):
         for key, value in config.items():
             if hasattr(self, key):
                 setattr(self, key, value)
-        
+        self.diagnostics = config.get('diagnostics', self.diagnostics)
+
         logger.info("MPO-3TF Full adapter initialized with optimized config")
 
     def get_required_features(self) -> List[str]:
@@ -190,12 +192,15 @@ class MPO3TFFullAdapter(BaseStrategy):
         for i in range(len(df)):
             if not warmup_mask.iloc[i]:
                 continue
-            
+
             row = df.iloc[i]
             prev_row = df.iloc[i-1] if i > 0 else row
-            
+
+            prev_state = self.entry_state
             # Update armed states
             self._update_armed_states(row)
+            if self.diagnostics and prev_state != self.entry_state:
+                logger.debug(f"State {prev_state.name} -> {self.entry_state.name} at {df.index[i]}")
             
             # Gate checks
             bull_gate = True
@@ -351,16 +356,64 @@ class MPO3TFFullAdapter(BaseStrategy):
                 np.where(signals['signal'] == -1, close - atr * self.trail_mult, np.nan)
             )
             signals['trail_offset'] = atr * self.trail_mult
-        
+
         signals['position_size'] = np.where(signals['signal'] != 0, self.position_size, 0)
-        
+        if self.diagnostics:
+            long_entries = (signals['signal'].diff() == 1).sum()
+            short_entries = (signals['signal'].diff() == -1).sum()
+            logger.info(f"MPO3TFFullAdapter entries - long: {long_entries}, short: {short_entries}")
+
         return signals
 
     def apply_risk_management(self, signals: pd.DataFrame, prices: pd.DataFrame,
                               features: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-        """Apply risk management rules."""
-        # Risk management is handled in generate_signals
-        return signals
+        """Apply risk management rules intrabar."""
+        managed = signals.copy()
+        position = 0
+        stop = target = trail_act = trail_off = None
+        for i in range(len(managed)):
+            bar = prices.iloc[i]
+            sig = managed.iloc[i]['signal']
+            if position == 0:
+                if sig != 0:
+                    position = sig
+                    stop = managed.iloc[i].get('stop_loss')
+                    target = managed.iloc[i].get('take_profit')
+                    trail_act = managed.iloc[i].get('trail_activation')
+                    trail_off = managed.iloc[i].get('trail_offset')
+                continue
+
+            if trail_act is not None and not np.isnan(trail_act):
+                if position == 1 and bar['high'] >= trail_act:
+                    stop = max(stop if stop is not None else -np.inf, trail_act - trail_off)
+                    trail_act = bar['high'] + trail_off
+                elif position == -1 and bar['low'] <= trail_act:
+                    stop = min(stop if stop is not None else np.inf, trail_act + trail_off)
+                    trail_act = bar['low'] - trail_off
+
+            exit_trade = False
+            if position == 1:
+                if stop is not None and bar['low'] <= stop:
+                    exit_trade = True
+                elif target is not None and bar['high'] >= target:
+                    exit_trade = True
+            else:
+                if stop is not None and bar['high'] >= stop:
+                    exit_trade = True
+                elif target is not None and bar['low'] <= target:
+                    exit_trade = True
+
+            if exit_trade:
+                managed.iloc[i, managed.columns.get_loc('signal')] = 0
+                position = 0
+                stop = target = trail_act = trail_off = None
+            else:
+                managed.iloc[i, managed.columns.get_loc('signal')] = position
+
+        if self.diagnostics:
+            exits = (managed['signal'].diff() == -1).sum() + (managed['signal'].diff() == 1).sum()
+            logger.info(f"MPO3TFFullAdapter exits: {exits}")
+        return managed
 
     def _calculate_backtest_metrics(self, signals: pd.DataFrame, prices: pd.DataFrame) -> Dict[str, any]:
         """Calculate backtest metrics."""

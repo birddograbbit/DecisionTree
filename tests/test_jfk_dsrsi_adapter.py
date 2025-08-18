@@ -19,7 +19,7 @@ class TestJFKDSRSIAdapter(unittest.TestCase):
     def test_initialization(self):
         adapter = JFKDSRSIAdapter()
         adapter.initialize(self.config)
-        self.assertEqual(adapter.dsrsi_length, 14)
+        self.assertEqual(adapter.dsrsi_length, 30)
         self.assertEqual(adapter.kps_length, 14)
 
     def test_signal_generation(self):
@@ -36,6 +36,25 @@ class TestJFKDSRSIAdapter(unittest.TestCase):
         results = adapter.backtest(self.data)
         self.assertIn('total_return', results)
         self.assertIn('trades', results)
+
+    def test_stop_loss_enforced(self):
+        adapter = JFKDSRSIAdapter()
+        adapter.initialize(self.config)
+        dates = self.data.index[:3]
+        signals = pd.DataFrame({
+            'signal': [0, 1, 1],
+            'stop_loss': [np.nan, 99, 99],
+            'take_profit': [np.nan, 105, 105],
+            'entry_price': [np.nan, 100, 100]
+        }, index=dates)
+        prices = pd.DataFrame({
+            'open': [100, 100, 100],
+            'high': [101, 101, 101],
+            'low': [99.5, 99.5, 98],
+            'close': [100, 100, 100]
+        }, index=dates)
+        managed = adapter.apply_risk_management(signals, prices)
+        self.assertEqual(managed.iloc[2]['signal'], 0)
 
 if __name__ == '__main__':
     unittest.main()

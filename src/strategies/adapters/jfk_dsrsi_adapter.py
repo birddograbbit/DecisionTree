@@ -7,49 +7,14 @@ import logging
 
 from src.strategies.base_strategy import BaseStrategy
 from src.features.indicators import calculate_rsi, calculate_atr
+from src.features.indicators_advanced import (
+    calculate_dsrsi,
+    kase_permission_stochastic,
+    phase_shift_transform,
+)
 import config
 
 logger = logging.getLogger(__name__)
-
-
-def calculate_dsrsi(df: pd.DataFrame, length: int = 14, smoothing: int = 3) -> pd.Series:
-    """Compute Double Smoothed RSI."""
-    rsi1 = calculate_rsi(df, window=length)
-    rsi_df = pd.DataFrame({'close': rsi1})
-    return calculate_rsi(rsi_df, window=smoothing)
-
-
-def calculate_kps(df: pd.DataFrame, length: int = 14, smooth: int = 3) -> pd.Series:
-    """Simplified Kase Permission Stochastic indicator."""
-    lowest = df['low'].rolling(length).min()
-    highest = df['high'].rolling(length).max()
-    kps = 100 * (df['close'] - lowest) / (highest - lowest)
-    return kps.rolling(smooth).mean()
-
-
-def calculate_pst(df: pd.DataFrame, source: str, length: int = 14, smooth: int = 3, x_shift: int = 3) -> pd.Series:
-    """Calculate Phase Shift Transform (PST) indicator."""
-    # Get source price
-    if source == 'open':
-        price = df['open']
-    elif source == 'high':
-        price = df['high']
-    elif source == 'low':
-        price = df['low']
-    else:
-        price = df['close']
-    
-    # Apply smoothing (simplified version of Jurik-like smoothing)
-    ema1 = price.ewm(span=length, adjust=False).mean()
-    ema2 = ema1.ewm(span=smooth, adjust=False).mean()
-    
-    # Apply phase shift
-    pst = ema2.shift(-x_shift)
-    
-    # Fill NaN values at the end with the last valid value
-    pst = pst.ffill()
-    
-    return pst
 
 
 class JFKDSRSIAdapter(BaseStrategy):
@@ -98,6 +63,7 @@ class JFKDSRSIAdapter(BaseStrategy):
         
         # Position sizing
         self.position_size = 0.1
+        self.diagnostics = False
 
     def initialize(self, config: Dict) -> None:
         super().initialize(config)
@@ -142,6 +108,7 @@ class JFKDSRSIAdapter(BaseStrategy):
         
         # Position sizing
         self.position_size = config.get('position_size', self.position_size)
+        self.diagnostics = config.get('diagnostics', self.diagnostics)
         logger.info("JFKDSRSI adapter initialized with optimized config")
 
     def get_required_features(self) -> List[str]:
@@ -168,24 +135,37 @@ class JFKDSRSIAdapter(BaseStrategy):
         
         # Calculate DSRSI if enabled
         if self.use_dsrsi:
-            if self.volume_weighted:
-                # Volume-weighted typical price
-                typical = (df['high'] + df['low'] + df['close']) / 3
-                volume_norm = df['volume'] / df['volume'].rolling(20).mean()
-                weighted_price = typical * volume_norm
-                dsrsi_df = pd.DataFrame({'close': weighted_price})
-            else:
-                dsrsi_df = pd.DataFrame({'close': source_price})
-            df['dsrsi'] = calculate_dsrsi(dsrsi_df, self.dsrsi_length, self.smoothing_period)
+            df['dsrsi'] = calculate_dsrsi(
+                df,
+                source=self.source,
+                length=self.dsrsi_length,
+                smoothing=self.smoothing_period,
+                volume_weighted=self.volume_weighted,
+            )
         else:
             # Use regular RSI if DSRSI is disabled
             df['dsrsi'] = calculate_rsi(df, window=self.dsrsi_length)
-        
-        # Calculate KPS with optimized smoothing
-        df['kps'] = calculate_kps(df, self.kps_length, self.kps_smooth_period)
-        
-        # Calculate PST
-        df['pst'] = calculate_pst(df, self.source, self.pst_length, self.pst_smooth, self.pst_x)
+
+        # Calculate KPS with PST
+        df['kps'] = kase_permission_stochastic(
+            df,
+            length=self.kps_length,
+            smooth=self.kps_smooth_period,
+            pst_length=self.pst_length,
+            pst_smooth=self.pst_smooth,
+            pst_x=self.pst_x,
+            jphase=self.jphase,
+        )
+
+        # Calculate PST separately for trend filtering
+        df['pst'] = phase_shift_transform(
+            source_price,
+            self.source,
+            length=self.pst_length,
+            smooth=self.pst_smooth,
+            x_shift=self.pst_x,
+            jphase=self.jphase,
+        )
         
         # Calculate ATR
         df['atr'] = calculate_atr(df, self.atr_length)
@@ -325,11 +305,61 @@ class JFKDSRSIAdapter(BaseStrategy):
             signals['trail_offset'] = trail_offset
         
         signals['position_size'] = np.where(signals['signal'] != 0, self.position_size, 0)
+        if self.diagnostics:
+            long_entries = (signals['signal'].diff() == 1).sum()
+            short_entries = (signals['signal'].diff() == -1).sum()
+            logger.info(f"JFKDSRSIAdapter entries - long: {long_entries}, short: {short_entries}")
         return signals
 
     def apply_risk_management(self, signals: pd.DataFrame, prices: pd.DataFrame,
                               features: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-        return signals
+        managed = signals.copy()
+        position = 0
+        stop = target = trail_act = trail_off = None
+        for i in range(len(managed)):
+            bar = prices.iloc[i]
+            sig = managed.iloc[i]['signal']
+            if position == 0:
+                if sig != 0:
+                    position = sig
+                    stop = managed.iloc[i].get('stop_loss')
+                    target = managed.iloc[i].get('take_profit')
+                    trail_act = managed.iloc[i].get('trail_activation')
+                    trail_off = managed.iloc[i].get('trail_offset')
+                continue
+
+            # Update trailing stop
+            if trail_act is not None and not np.isnan(trail_act):
+                if position == 1 and bar['high'] >= trail_act:
+                    stop = max(stop if stop is not None else -np.inf, trail_act - trail_off)
+                    trail_act = bar['high'] + trail_off
+                elif position == -1 and bar['low'] <= trail_act:
+                    stop = min(stop if stop is not None else np.inf, trail_act + trail_off)
+                    trail_act = bar['low'] - trail_off
+
+            exit_trade = False
+            if position == 1:
+                if stop is not None and bar['low'] <= stop:
+                    exit_trade = True
+                elif target is not None and bar['high'] >= target:
+                    exit_trade = True
+            else:  # short
+                if stop is not None and bar['high'] >= stop:
+                    exit_trade = True
+                elif target is not None and bar['low'] <= target:
+                    exit_trade = True
+
+            if exit_trade:
+                managed.iloc[i, managed.columns.get_loc('signal')] = 0
+                position = 0
+                stop = target = trail_act = trail_off = None
+            else:
+                managed.iloc[i, managed.columns.get_loc('signal')] = position
+
+        if self.diagnostics:
+            exits = (managed['signal'].diff() == -1).sum() + (managed['signal'].diff() == 1).sum()
+            logger.info(f"JFKDSRSIAdapter exits: {exits}")
+        return managed
 
     def _calculate_backtest_metrics(self, signals: pd.DataFrame, prices: pd.DataFrame) -> Dict[str, any]:
         aligned_prices = prices.loc[signals.index]

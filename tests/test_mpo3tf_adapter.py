@@ -19,7 +19,7 @@ class TestMPO3TFAdapter(unittest.TestCase):
     def test_initialization(self):
         adapter = MPO3TFAdapter()
         adapter.initialize(self.config)
-        self.assertEqual(adapter.rsi_period, 14)
+        self.assertEqual(adapter.mpo_length, 14)
         self.assertEqual(adapter.atr_length, 14)
 
     def test_signal_generation(self):
@@ -36,6 +36,25 @@ class TestMPO3TFAdapter(unittest.TestCase):
         results = adapter.backtest(self.data)
         self.assertIn('total_return', results)
         self.assertIn('trades', results)
+
+    def test_stop_loss_enforced(self):
+        adapter = MPO3TFAdapter()
+        adapter.initialize(self.config)
+        dates = self.data.index[:3]
+        signals = pd.DataFrame({
+            'signal': [0, -1, -1],
+            'stop_loss': [np.nan, 51, 51],
+            'take_profit': [np.nan, 45, 45],
+            'entry_price': [np.nan, 50, 50]
+        }, index=dates)
+        prices = pd.DataFrame({
+            'open': [50, 50, 50],
+            'high': [50.5, 50.5, 52],
+            'low': [49.5, 49, 46],
+            'close': [50, 50, 50]
+        }, index=dates)
+        managed = adapter.apply_risk_management(signals, prices)
+        self.assertEqual(managed.iloc[2]['signal'], 0)
 
 if __name__ == '__main__':
     unittest.main()

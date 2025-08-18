@@ -1,19 +1,29 @@
 import logging
 from typing import Dict, List, Optional, Tuple
+from enum import Enum
 
 import numpy as np
 import pandas as pd
 
 from src.strategies.base_strategy import BaseStrategy
-from src.features.indicators import calculate_rsi, calculate_atr
+from src.features.indicators import calculate_atr
+from src.features.indicators_advanced import calculate_mpo, calculate_mbrsi
 from src.features.multi_timeframe_features import MultiTimeframeAggregator
 import config
 
 logger = logging.getLogger(__name__)
 
 
+class EntryState(Enum):
+    IDLE = 0
+    LOOK_LONG1 = 1
+    LOOK_SHORT1 = 2
+    LOOK_LONG2 = 3
+    LOOK_SHORT2 = 4
+
+
 class MPO3TFAdapter(BaseStrategy):
-    """Multi-timeframe momentum strategy using RSI alignment."""
+    """Multi-timeframe momentum strategy using MPO with state machine."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -21,9 +31,9 @@ class MPO3TFAdapter(BaseStrategy):
         self.use_entry1 = True
         self.use_entry2 = True
         self.entry2_min_lm = 1  # Minimum local momentum for entry2
-        
-        # RSI parameters for base timeframe
-        self.rsi_period = 14
+
+        # MPO parameters
+        self.mpo_length = 14
         
         # Multi-timeframe overbought/oversold thresholds
         self.ob1 = 93.15  # Timeframe 1 overbought
@@ -47,9 +57,13 @@ class MPO3TFAdapter(BaseStrategy):
         
         # Position sizing
         self.position_size = 0.1
-        
-        # Multi-timeframe aggregator
+        self.diagnostics = False
+
+        # Multi-timeframe aggregator and state tracking
         self.aggregator = MultiTimeframeAggregator()
+        self.entry_state = EntryState.IDLE
+        self.ob1_armed = self.ob2_armed = self.ob3_armed = False
+        self.os1_armed = self.os2_armed = self.os3_armed = False
 
     def initialize(self, config: Dict) -> None:
         super().initialize(config)
@@ -58,8 +72,8 @@ class MPO3TFAdapter(BaseStrategy):
         self.use_entry2 = config.get('use_entry2', self.use_entry2)
         self.entry2_min_lm = config.get('entry2_min_lm', self.entry2_min_lm)
         
-        # RSI parameters
-        self.rsi_period = config.get('rsi_period', self.rsi_period)
+        # MPO parameters
+        self.mpo_length = config.get('mpo_length', self.mpo_length)
         
         # Multi-timeframe thresholds
         self.ob1 = config.get('ob1', self.ob1)
@@ -77,12 +91,13 @@ class MPO3TFAdapter(BaseStrategy):
         self.atr_length = config.get('atr_length', self.atr_length)
         self.sl_mult = config.get('sl_mult', self.sl_mult)
         self.tp_mult = config.get('tp_mult', self.tp_mult)
-        
+
         # Minimum bars warmup
         self.min_bars_warmup = config.get('min_bars_warmup', self.min_bars_warmup)
-        
+
         # Position sizing
         self.position_size = config.get('position_size', self.position_size)
+        self.diagnostics = config.get('diagnostics', self.diagnostics)
         logger.info("MPO3TF adapter initialized with optimized config")
 
     def get_required_features(self) -> List[str]:
@@ -97,67 +112,148 @@ class MPO3TFAdapter(BaseStrategy):
     def _add_indicators(self, data: pd.DataFrame) -> pd.DataFrame:
         df = data.copy()
         
-        # Calculate RSI for 1-minute (base) timeframe
-        df['rsi_1m'] = calculate_rsi(df, window=self.rsi_period)
-        
+        # Calculate MPO for 1-minute timeframe
+        df['mpo_1m'] = calculate_mpo(df, length=self.mpo_length)
+
         # Resample to higher timeframes
         data_5 = self.aggregator.resample_data(df, '5T')
         data_10 = self.aggregator.resample_data(df, '10T')
         data_15 = self.aggregator.resample_data(df, '15T')
-        
-        # Calculate RSI for each timeframe
-        rsi_5 = calculate_rsi(data_5, window=self.rsi_period).reindex(df.index, method='ffill')
-        rsi_10 = calculate_rsi(data_10, window=self.rsi_period).reindex(df.index, method='ffill')
-        rsi_15 = calculate_rsi(data_15, window=self.rsi_period).reindex(df.index, method='ffill')
-        
-        df['rsi_5m'] = rsi_5
-        df['rsi_10m'] = rsi_10
-        df['rsi_15m'] = rsi_15
-        
+
+        # Calculate MPO for each timeframe
+        mpo_5 = calculate_mpo(data_5, length=self.mpo_length).reindex(df.index, method='ffill')
+        mpo_10 = calculate_mpo(data_10, length=self.mpo_length).reindex(df.index, method='ffill')
+        mpo_15 = calculate_mpo(data_15, length=self.mpo_length).reindex(df.index, method='ffill')
+
+        df['mpo_5m'] = mpo_5
+        df['mpo_10m'] = mpo_10
+        df['mpo_15m'] = mpo_15
+
         # Calculate ATR
         df['atr'] = calculate_atr(df, self.atr_length)
-        
-        # Calculate MBRSI (Money Flow RSI) if needed
+
+        # Calculate MBRSI gate if enabled
         if self.use_mbrsi_gate:
-            # Calculate money flow
-            typical_price = (df['high'] + df['low'] + df['close']) / 3
-            raw_money_flow = typical_price * df['volume']
-            
-            # Separate positive and negative money flow
-            positive_flow = np.where(typical_price > typical_price.shift(1), raw_money_flow, 0)
-            negative_flow = np.where(typical_price < typical_price.shift(1), raw_money_flow, 0)
-            
-            # Calculate money flow ratio
-            positive_mf = pd.Series(positive_flow).rolling(self.rsi_period).sum()
-            negative_mf = pd.Series(negative_flow).rolling(self.rsi_period).sum()
-            
-            # Calculate MBRSI
-            mf_ratio = positive_mf / (negative_mf + 1e-10)  # Avoid division by zero
-            df['mbrsi'] = 100 - (100 / (1 + mf_ratio))
+            mbrsi_15 = calculate_mbrsi(data_15)
+            df['mbrsi'] = mbrsi_15.reindex(df.index, method='ffill')
         else:
-            df['mbrsi'] = 50  # Neutral value when not used
-        
-        # Calculate local momentum for entry2
-        df['local_momentum'] = df['close'].diff(self.entry2_min_lm)
-        
+            df['mbrsi'] = 50
+
         # Track bars since start for warmup
         df['bar_count'] = range(len(df))
-        
+
         return df
+
+    def _update_armed_states(self, row: pd.Series) -> None:
+        if row['mpo_1m'] >= self.ob1:
+            self.ob1_armed = True
+        if row['mpo_5m'] >= self.ob2:
+            self.ob2_armed = True
+        if row['mpo_10m'] >= self.ob3:
+            self.ob3_armed = True
+
+        if row['mpo_1m'] <= self.os1:
+            self.os1_armed = True
+        if row['mpo_5m'] <= self.os2:
+            self.os2_armed = True
+        if row['mpo_10m'] <= self.os3:
+            self.os3_armed = True
+
+    def _reset_armed_states(self) -> None:
+        self.ob1_armed = self.ob2_armed = self.ob3_armed = False
+        self.os1_armed = self.os2_armed = self.os3_armed = False
+        self.entry_state = EntryState.IDLE
+
+    def _calculate_entry_signals(self, df: pd.DataFrame) -> pd.DataFrame:
+        signals = pd.DataFrame(index=df.index)
+        signals['long_entry'] = False
+        signals['short_entry'] = False
+
+        warmup_mask = df['bar_count'] >= self.min_bars_warmup
+
+        for i in range(len(df)):
+            if not warmup_mask.iloc[i]:
+                continue
+            row = df.iloc[i]
+            prev_row = df.iloc[i-1] if i > 0 else row
+
+            prev_state = self.entry_state
+            self._update_armed_states(row)
+            if self.diagnostics and prev_state != self.entry_state:
+                logger.debug(f"State {prev_state.name} -> {self.entry_state.name} at {df.index[i]}")
+
+            bull_gate = True
+            bear_gate = True
+            if self.use_mbrsi_gate:
+                bull_gate = row['mbrsi'] >= self.mbrsi_thresh
+                bear_gate = row['mbrsi'] <= self.mbrsi_thresh
+
+            if self.use_entry1 and self.entry_state == EntryState.IDLE:
+                below50_3 = row['mpo_15m'] < 50
+                above50_3 = row['mpo_15m'] > 50
+                above50_1_or_2 = (row['mpo_1m'] > 50) or (row['mpo_5m'] > 50)
+                below50_1_or_2 = (row['mpo_1m'] < 50) or (row['mpo_5m'] < 50)
+
+                if below50_3 and above50_1_or_2 and bear_gate:
+                    self.entry_state = EntryState.LOOK_SHORT1
+                elif above50_3 and below50_1_or_2 and bull_gate:
+                    self.entry_state = EntryState.LOOK_LONG1
+
+            if self.entry_state == EntryState.LOOK_SHORT1 and row['mpo_15m'] > 50:
+                self.entry_state = EntryState.IDLE
+            if self.entry_state == EntryState.LOOK_LONG1 and row['mpo_15m'] < 50:
+                self.entry_state = EntryState.IDLE
+
+            co1_50 = (prev_row['mpo_1m'] < 50) and (row['mpo_1m'] >= 50)
+            cu1_50 = (prev_row['mpo_1m'] > 50) and (row['mpo_1m'] <= 50)
+            co2_50 = (prev_row['mpo_5m'] < 50) and (row['mpo_5m'] >= 50)
+            cu2_50 = (prev_row['mpo_5m'] > 50) and (row['mpo_5m'] <= 50)
+
+            if self.use_entry1:
+                if self.entry_state == EntryState.LOOK_LONG1 and (co1_50 or co2_50) and bull_gate:
+                    signals.iloc[i, signals.columns.get_loc('long_entry')] = True
+                    self._reset_armed_states()
+                elif self.entry_state == EntryState.LOOK_SHORT1 and (cu1_50 or cu2_50) and bear_gate:
+                    signals.iloc[i, signals.columns.get_loc('short_entry')] = True
+                    self._reset_armed_states()
+
+            if self.use_entry2:
+                if self.entry_state == EntryState.IDLE:
+                    if self.ob1_armed and self.ob2_armed and self.ob3_armed and bear_gate:
+                        self.entry_state = EntryState.LOOK_SHORT2
+                    elif self.os1_armed and self.os2_armed and self.os3_armed and bull_gate:
+                        self.entry_state = EntryState.LOOK_LONG2
+
+                lm_up_count = 0
+                if (prev_row['mpo_1m'] < self.os1) and (row['mpo_1m'] >= self.os1):
+                    lm_up_count += 1
+                if (prev_row['mpo_5m'] < self.os2) and (row['mpo_5m'] >= self.os2):
+                    lm_up_count += 1
+
+                lm_dn_count = 0
+                if (prev_row['mpo_1m'] > self.ob1) and (row['mpo_1m'] <= self.ob1):
+                    lm_dn_count += 1
+                if (prev_row['mpo_5m'] > self.ob2) and (row['mpo_5m'] <= self.ob2):
+                    lm_dn_count += 1
+
+                if self.entry_state == EntryState.LOOK_LONG2 and (lm_up_count >= self.entry2_min_lm) and bull_gate:
+                    signals.iloc[i, signals.columns.get_loc('long_entry')] = True
+                    self._reset_armed_states()
+                elif self.entry_state == EntryState.LOOK_SHORT2 and (lm_dn_count >= self.entry2_min_lm) and bear_gate:
+                    signals.iloc[i, signals.columns.get_loc('short_entry')] = True
+                    self._reset_armed_states()
+
+        return signals
 
     def generate_features(self, data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series, pd.DatetimeIndex]:
         df = self._add_indicators(data)
         
         # Build feature list
-        feature_cols = ['close', 'rsi_1m', 'rsi_5m', 'rsi_10m', 'rsi_15m', 'atr']
-        
-        # Add optional features
+        feature_cols = ['close', 'mpo_1m', 'mpo_5m', 'mpo_10m', 'mpo_15m', 'atr']
+
         if self.use_mbrsi_gate and 'mbrsi' in df.columns:
             feature_cols.append('mbrsi')
-        
-        if 'local_momentum' in df.columns:
-            feature_cols.append('local_momentum')
-        
+
         if 'bar_count' in df.columns:
             feature_cols.append('bar_count')
         
@@ -178,100 +274,87 @@ class MPO3TFAdapter(BaseStrategy):
 
     def generate_signals(self, features: pd.DataFrame, predictions: Optional[np.ndarray],
                         dates: pd.DatetimeIndex) -> pd.DataFrame:
+        entry_signals = self._calculate_entry_signals(features)
+
         signals = pd.DataFrame(index=dates)
         signals['date'] = dates
         signals['symbol'] = self.config.get('symbol', 'SPY') if hasattr(self, 'config') and self.config else 'SPY'
         signals['signal'] = 0
         signals['entry_price'] = features['close']
+
+        position = 0
+        for i in range(len(signals)):
+            if position == 0:
+                if entry_signals.iloc[i]['long_entry']:
+                    signals.iloc[i, signals.columns.get_loc('signal')] = 1
+                    position = 1
+                elif entry_signals.iloc[i]['short_entry']:
+                    signals.iloc[i, signals.columns.get_loc('signal')] = -1
+                    position = -1
+            else:
+                signals.iloc[i, signals.columns.get_loc('signal')] = position
+
         atr = features['atr']
         close = features['close']
-        
-        # Skip early bars during warmup period
-        warmup_mask = features.get('bar_count', pd.Series(range(len(features)))) >= self.min_bars_warmup
-        
-        # Entry 1: Multi-timeframe RSI alignment
-        entry1_long = False
-        entry1_short = False
-        
-        if self.use_entry1:
-            # Long conditions: All RSIs above their respective overbought thresholds
-            entry1_long = (
-                (features['rsi_1m'] > self.ob1) &
-                (features['rsi_5m'] > self.ob2) &
-                (features['rsi_10m'] > self.ob3) &
-                warmup_mask
-            )
-            
-            # Short conditions: All RSIs below their respective oversold thresholds
-            entry1_short = (
-                (features['rsi_1m'] < self.os1) &
-                (features['rsi_5m'] < self.os2) &
-                (features['rsi_10m'] < self.os3) &
-                warmup_mask
-            )
-        
-        # Entry 2: With local momentum filter
-        entry2_long = False
-        entry2_short = False
-        
-        if self.use_entry2:
-            # Entry 2 uses relaxed thresholds but requires momentum confirmation
-            local_momentum = features.get('local_momentum', pd.Series(0, index=features.index))
-            
-            # Long: RSIs moderately bullish + positive momentum
-            entry2_long = (
-                (features['rsi_1m'] > 60) &  # Relaxed from ob1
-                (features['rsi_5m'] > 55) &  # Relaxed from ob2
-                (features['rsi_10m'] > 50) &  # Relaxed from ob3
-                (local_momentum > 0) &  # Positive momentum
-                warmup_mask
-            )
-            
-            # Short: RSIs moderately bearish + negative momentum
-            entry2_short = (
-                (features['rsi_1m'] < 40) &  # Relaxed from os1
-                (features['rsi_5m'] < 45) &  # Relaxed from os2
-                (features['rsi_10m'] < 50) &  # Relaxed from os3
-                (local_momentum < 0) &  # Negative momentum
-                warmup_mask
-            )
-        
-        # Combine entry conditions
-        long_cond = entry1_long | entry2_long
-        short_cond = entry1_short | entry2_short
-        
-        # Apply MBRSI gate if enabled
-        if self.use_mbrsi_gate:
-            mbrsi = features.get('mbrsi', pd.Series(50, index=features.index))
-            # MBRSI confirmation: above threshold for longs, below for shorts
-            long_cond = long_cond & (mbrsi > self.mbrsi_thresh)
-            short_cond = short_cond & (mbrsi < (100 - self.mbrsi_thresh))
-        
-        # Set signals
-        signals.loc[long_cond, 'signal'] = 1
-        signals.loc[short_cond, 'signal'] = -1
-        
-        # Risk management with optimized multipliers
+
         signals['stop_loss'] = np.where(
             signals['signal'] == 1,
             close - atr * self.sl_mult,
             np.where(signals['signal'] == -1, close + atr * self.sl_mult, np.nan)
         )
-        
+
         signals['take_profit'] = np.where(
             signals['signal'] == 1,
             close + atr * self.tp_mult,
             np.where(signals['signal'] == -1, close - atr * self.tp_mult, np.nan)
         )
-        
-        # Position sizing
+
         signals['position_size'] = np.where(signals['signal'] != 0, self.position_size, 0)
-        
+        if self.diagnostics:
+            long_entries = (signals['signal'].diff() == 1).sum()
+            short_entries = (signals['signal'].diff() == -1).sum()
+            logger.info(f"MPO3TFAdapter entries - long: {long_entries}, short: {short_entries}")
+
         return signals
 
     def apply_risk_management(self, signals: pd.DataFrame, prices: pd.DataFrame,
                               features: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-        return signals
+        managed = signals.copy()
+        position = 0
+        stop = target = None
+        for i in range(len(managed)):
+            bar = prices.iloc[i]
+            sig = managed.iloc[i]['signal']
+            if position == 0:
+                if sig != 0:
+                    position = sig
+                    stop = managed.iloc[i].get('stop_loss')
+                    target = managed.iloc[i].get('take_profit')
+                continue
+
+            exit_trade = False
+            if position == 1:
+                if stop is not None and bar['low'] <= stop:
+                    exit_trade = True
+                elif target is not None and bar['high'] >= target:
+                    exit_trade = True
+            else:
+                if stop is not None and bar['high'] >= stop:
+                    exit_trade = True
+                elif target is not None and bar['low'] <= target:
+                    exit_trade = True
+
+            if exit_trade:
+                managed.iloc[i, managed.columns.get_loc('signal')] = 0
+                position = 0
+                stop = target = None
+            else:
+                managed.iloc[i, managed.columns.get_loc('signal')] = position
+
+        if self.diagnostics:
+            exits = (managed['signal'].diff() == -1).sum() + (managed['signal'].diff() == 1).sum()
+            logger.info(f"MPO3TFAdapter exits: {exits}")
+        return managed
 
     def _calculate_backtest_metrics(self, signals: pd.DataFrame, prices: pd.DataFrame) -> Dict[str, any]:
         aligned_prices = prices.loc[signals.index]

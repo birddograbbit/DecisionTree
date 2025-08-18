@@ -353,6 +353,9 @@ class JFKDSRSIFullAdapter(BaseStrategy):
             signals['trail_offset'] = trail_offset
 
         signals['position_size'] = np.where(signals['signal'] != 0, self.position_size, 0)
+        # End-of-day flattening
+        eod_mask = (signals.index.hour == 15) & (signals.index.minute == 59)
+        signals.loc[eod_mask, 'signal'] = 0
         if self.diagnostics:
             long_entries = (signals['signal'].diff() == 1).sum()
             short_entries = (signals['signal'].diff() == -1).sum()
@@ -369,6 +372,14 @@ class JFKDSRSIFullAdapter(BaseStrategy):
         for i in range(len(managed)):
             bar = prices.iloc[i]
             sig = managed.iloc[i]['signal']
+            ts = prices.index[i]
+            if ts.hour == 15 and ts.minute == 59:
+                managed.iloc[i, managed.columns.get_loc('signal')] = 0
+                position = 0
+                stop = target = trail_act = trail_off = None
+                if self.diagnostics:
+                    logger.debug(f"EOD flatten at {ts}")
+                continue
             if position == 0:
                 if sig != 0:
                     position = sig
@@ -376,6 +387,8 @@ class JFKDSRSIFullAdapter(BaseStrategy):
                     target = managed.iloc[i].get('take_profit')
                     trail_act = managed.iloc[i].get('trail_activation')
                     trail_off = managed.iloc[i].get('trail_offset')
+                    if self.diagnostics:
+                        logger.debug(f"Position opened {position} at {ts}")
                 continue
 
             if trail_act is not None and not np.isnan(trail_act):
@@ -400,9 +413,13 @@ class JFKDSRSIFullAdapter(BaseStrategy):
 
             if exit_trade:
                 managed.iloc[i, managed.columns.get_loc('signal')] = 0
+                if self.diagnostics:
+                    logger.debug(f"Position closed at {ts}")
                 position = 0
                 stop = target = trail_act = trail_off = None
             else:
+                if position != sig and self.diagnostics:
+                    logger.debug(f"Position changed from {position} to {sig} at {ts}")
                 managed.iloc[i, managed.columns.get_loc('signal')] = position
 
         if self.diagnostics:
@@ -414,7 +431,7 @@ class JFKDSRSIFullAdapter(BaseStrategy):
         """Calculate backtest metrics."""
         aligned_prices = prices.loc[signals.index]
         position = signals['signal'].shift(1).fillna(0)
-        returns = position * aligned_prices['close'].pct_change()
+        returns = position * aligned_prices['open'].pct_change()
         
         # Get timeframe for proper annualization
         timeframe = self.config.get('timeframe', '5min') if hasattr(self, 'config') and self.config else '5min'

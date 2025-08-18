@@ -284,6 +284,11 @@ class MPO3TFAdapter(BaseStrategy):
 
         position = 0
         for i in range(len(signals)):
+            current_time = dates[i]
+            if current_time.hour == 15 and current_time.minute == 59:
+                signals.iloc[i, signals.columns.get_loc('signal')] = 0
+                position = 0
+                continue
             if position == 0:
                 if entry_signals.iloc[i]['long_entry']:
                     signals.iloc[i, signals.columns.get_loc('signal')] = 1
@@ -291,8 +296,18 @@ class MPO3TFAdapter(BaseStrategy):
                 elif entry_signals.iloc[i]['short_entry']:
                     signals.iloc[i, signals.columns.get_loc('signal')] = -1
                     position = -1
+            elif position == 1:
+                if entry_signals.iloc[i]['short_entry']:
+                    signals.iloc[i, signals.columns.get_loc('signal')] = -1
+                    position = -1
+                else:
+                    signals.iloc[i, signals.columns.get_loc('signal')] = 1
             else:
-                signals.iloc[i, signals.columns.get_loc('signal')] = position
+                if entry_signals.iloc[i]['long_entry']:
+                    signals.iloc[i, signals.columns.get_loc('signal')] = 1
+                    position = 1
+                else:
+                    signals.iloc[i, signals.columns.get_loc('signal')] = -1
 
         atr = features['atr']
         close = features['close']
@@ -325,11 +340,21 @@ class MPO3TFAdapter(BaseStrategy):
         for i in range(len(managed)):
             bar = prices.iloc[i]
             sig = managed.iloc[i]['signal']
+            ts = prices.index[i]
+            if ts.hour == 15 and ts.minute == 59:
+                managed.iloc[i, managed.columns.get_loc('signal')] = 0
+                position = 0
+                stop = target = None
+                if self.diagnostics:
+                    logger.debug(f"EOD flatten at {ts}")
+                continue
             if position == 0:
                 if sig != 0:
                     position = sig
                     stop = managed.iloc[i].get('stop_loss')
                     target = managed.iloc[i].get('take_profit')
+                    if self.diagnostics:
+                        logger.debug(f"Position opened {position} at {ts}")
                 continue
 
             exit_trade = False
@@ -346,9 +371,13 @@ class MPO3TFAdapter(BaseStrategy):
 
             if exit_trade:
                 managed.iloc[i, managed.columns.get_loc('signal')] = 0
+                if self.diagnostics:
+                    logger.debug(f"Position closed at {ts}")
                 position = 0
                 stop = target = None
             else:
+                if position != sig and self.diagnostics:
+                    logger.debug(f"Position changed from {position} to {sig} at {ts}")
                 managed.iloc[i, managed.columns.get_loc('signal')] = position
 
         if self.diagnostics:
@@ -359,7 +388,7 @@ class MPO3TFAdapter(BaseStrategy):
     def _calculate_backtest_metrics(self, signals: pd.DataFrame, prices: pd.DataFrame) -> Dict[str, any]:
         aligned_prices = prices.loc[signals.index]
         position = signals['signal'].shift(1).fillna(0)
-        returns = position * aligned_prices['close'].pct_change()
+        returns = position * aligned_prices['open'].pct_change()
 
         timeframe = self.config.get('timeframe', '1min') if hasattr(self, 'config') and self.config else '1min'
         default_commission = (
